@@ -7,35 +7,43 @@ export default function GCCSuggestionCard({ suggestion }: { suggestion: Suggesti
   const isBilling = suggestion.type === "Billing";
 
   return (
-    <article className="rounded-[20px] border border-slate-200/80 bg-white p-4 shadow-[0_8px_25px_rgba(50,61,105,0.06)] sm:p-5">
-      <div className="flex items-start gap-3">
-        <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${isBilling ? "bg-sky-50 text-sky-600" : "bg-violet-50 text-violet-600"}`}>
-          {isBilling ? (
-            <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true"><path d="M7 3.5h8l3 3V20H7Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.7" /><path d="M14.5 3.5V7H18M10 11h5M10 14.5h5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" /></svg>
-          ) : (
-            <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Z" fill="none" stroke="currentColor" strokeWidth="1.7" /><path d="M9.8 9a2.4 2.4 0 0 1 4.5 1.1c0 1.7-2.3 1.8-2.3 3.3M12 16.5h.01" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" /></svg>
-          )}
+    <article className="rounded-[16px] border border-slate-200/75 bg-white/95 p-3.5 shadow-[0_6px_20px_rgba(50,61,105,0.055)]">
+      <div className="flex items-center justify-between gap-3">
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[8px] font-extrabold uppercase tracking-[0.12em] ${
+            isBilling
+              ? "border-sky-100 bg-sky-50 text-sky-600"
+              : "border-violet-100 bg-violet-50 text-violet-600"
+          }`}
+        >
+          <i className={`size-1 rounded-full ${isBilling ? "bg-sky-400" : "bg-violet-400"}`} />
+          {suggestion.type}
         </span>
-        <div className="min-w-0 flex-1">
-          <span className={`text-[9px] font-extrabold uppercase tracking-[0.16em] ${isBilling ? "text-sky-600" : "text-violet-600"}`}>{suggestion.type}</span>
-          <p className="mt-1 text-[13px] font-semibold leading-5 text-slate-800">{suggestion.title}</p>
-        </div>
+        <button type="button" className="inline-flex items-center gap-1 rounded-full px-1.5 py-1 text-[9px] font-semibold text-slate-400 transition hover:bg-slate-50 hover:text-slate-600">
+          <svg viewBox="0 0 16 16" className="size-3" aria-hidden="true">
+            <path d="m4.5 4.5 7 7m0-7-7 7" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+          </svg>
+          Ignore
+        </button>
       </div>
 
-      {suggestion.detected && (
-        <div className="mt-4 rounded-xl bg-emerald-50/70 p-3">
-          <span className="text-[9px] font-extrabold uppercase tracking-[0.15em] text-emerald-600">Detected</span>
-          <p className="mt-1 text-[11px] leading-5 text-slate-600">{suggestion.detected}</p>
+      <p className="mt-2.5 text-[11px] font-semibold leading-[1.55] text-slate-700">{suggestion.title}</p>
+
+      {(suggestion.detected || isBilling) && (
+        <div className="mt-2.5 flex items-start gap-2 border-t border-slate-100 pt-2.5">
+          <span className="mt-0.5 shrink-0 rounded-full border border-emerald-100 bg-emerald-50 px-1.5 py-0.5 text-[7px] font-extrabold uppercase tracking-[0.1em] text-emerald-600">
+            Detected
+          </span>
+          <p className="text-[9px] leading-[1.55] text-slate-500">{suggestion.detected ?? "Billing opportunity identified from the live session."}</p>
         </div>
       )}
 
-      <div className="mt-4 flex items-center justify-end gap-3">
-        <button type="button" className="px-2 py-2 text-[10px] font-bold text-slate-400 hover:text-slate-600">Ignore</button>
+      <div className="mt-3 flex justify-end">
         <SlideAction
           label="Slide to Approve"
           completedLabel="Approved"
           onComplete={() => undefined}
-          className="w-[154px]"
+          className="w-[148px]"
         />
       </div>
     </article>

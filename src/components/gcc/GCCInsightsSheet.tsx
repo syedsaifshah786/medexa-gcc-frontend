@@ -7,46 +7,43 @@ import type { Suggestion } from "@/lib/mock/gcc-session";
 type Props = {
   count: number;
   suggestions: Suggestion[];
-  expanded: boolean;
   claimFocused: boolean;
-  onToggleExpanded: () => void;
   onClaimFocus: () => void;
 };
 
-export default function GCCInsightsSheet({ count, suggestions, expanded, claimFocused, onToggleExpanded, onClaimFocus }: Props) {
+export default function GCCInsightsSheet({ count, suggestions, claimFocused, onClaimFocus }: Props) {
   const ordered = claimFocused
     ? ["claim", ...suggestions.map((item) => item.id)]
     : [suggestions[0].id, suggestions[1].id, "claim", suggestions[2].id];
 
   return (
-    <section aria-labelledby="insights-title" className="relative">
-      <div className="mb-4 flex items-center justify-between px-1">
+    <section aria-labelledby="insights-title" className="relative mx-auto w-full max-w-[620px]">
+      <div className="mb-3 flex items-center justify-between px-1">
         <div className="flex items-center gap-2">
-          <span className="relative flex size-2">
+          <span className="relative flex size-1.5">
             <i className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-70" />
-            <i className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+            <i className="relative inline-flex size-1.5 rounded-full bg-emerald-500" />
           </span>
-          <h2 id="insights-title" className="text-xs font-semibold text-slate-500">Medexa is Processing for Insights...</h2>
+          <h2 id="insights-title" className="text-[10px] font-semibold text-slate-500 sm:text-[11px]">Medexa is Processing for Insights...</h2>
         </div>
-        <strong className="rounded-full bg-indigo-50 px-3 py-1.5 text-[10px] text-indigo-600">{count} Suggestions</strong>
+        <strong className="text-[9px] font-bold text-indigo-500 sm:text-[10px]">{count} Suggestions</strong>
       </div>
 
-      <div className={`gcc-insights-shell relative overflow-hidden rounded-t-[30px] border border-emerald-200/80 bg-white/76 px-4 pb-6 pt-3 shadow-[0_-8px_50px_rgba(46,125,112,0.12)] backdrop-blur-2xl transition-all sm:px-6 ${expanded ? "max-h-[1500px]" : "max-h-[660px]"}`}>
-        <div className="pointer-events-none absolute inset-0 opacity-30 [background-image:radial-gradient(#7f86df_0.65px,transparent_0.65px)] [background-size:15px_15px] [mask-image:linear-gradient(to_bottom,black,transparent_55%)]" />
-        <button
-          type="button"
-          onClick={onToggleExpanded}
-          aria-label={expanded ? "Collapse suggestions" : "Expand suggestions"}
-          className="relative mx-auto mb-5 block h-1.5 w-16 rounded-full bg-slate-300 transition hover:bg-indigo-400"
-        />
-        <div className={`relative grid gap-4 ${expanded ? "lg:grid-cols-2" : ""}`}>
-          {ordered.map((id) =>
-            id === "claim" ? (
-              <GCCClaimReadinessCard key={id} focused={claimFocused} onFocus={onClaimFocus} />
-            ) : (
-              <GCCSuggestionCard key={id} suggestion={suggestions.find((item) => item.id === id)!} />
-            ),
-          )}
+      <div className="gcc-insights-shell relative overflow-hidden rounded-[26px] border border-emerald-200/80 bg-[#fbfdfc]/95 shadow-[0_14px_40px_rgba(46,125,112,0.1)] backdrop-blur-xl">
+        <div className="pointer-events-none absolute inset-0 opacity-25 [background-image:radial-gradient(#7f86df_0.65px,transparent_0.65px)] [background-size:15px_15px] [mask-image:linear-gradient(to_bottom,black,transparent_80%)]" />
+        <div className="relative flex h-8 items-center justify-center bg-white/45">
+          <span className="h-1 w-12 rounded-full bg-slate-300/90" />
+        </div>
+        <div className="gcc-insights-scroll relative h-[510px] overflow-y-auto overscroll-contain px-3 pb-5 sm:h-[540px] sm:px-5">
+          <div className="mx-auto grid w-full max-w-[510px] gap-3">
+            {ordered.map((id) =>
+              id === "claim" ? (
+                <GCCClaimReadinessCard key={id} focused={claimFocused} onFocus={onClaimFocus} />
+              ) : (
+                <GCCSuggestionCard key={id} suggestion={suggestions.find((item) => item.id === id)!} />
+              ),
+            )}
+          </div>
         </div>
       </div>
     </section>
