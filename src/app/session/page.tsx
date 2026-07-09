@@ -13,7 +13,7 @@ export default function GCCSessionPage() {
   const [claimFocused, setClaimFocused] = useState(false);
 
   return (
-    <div className="min-h-screen overflow-x-hidden bg-[#f3f6fb] text-slate-900">
+    <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_50%_18%,rgba(224,231,255,0.5),transparent_34%),#f3f6fb] text-slate-900">
       <GCCHeader />
       <section className="relative z-40 flex w-full items-center justify-between gap-3 px-4 py-2 md:px-8">
         <div className="flex min-w-0 items-center gap-2">
@@ -42,8 +42,8 @@ export default function GCCSessionPage() {
         <GCCClaimQualityDropdown compactScore={gccSession.claimQuality} />
       </section>
 
-      <main className="mx-auto w-full max-w-[420px] px-4 pb-10">
-        <div className="space-y-3">
+      <main className="mx-auto w-full max-w-[800px] px-4 pb-12 md:px-6">
+        <div className="space-y-4">
           <GCCSessionHero timer={gccSession.recordingTime} transcript={[...gccSession.transcript]} />
           <GCCInsightsSheet
             count={gccSession.suggestionsCount}

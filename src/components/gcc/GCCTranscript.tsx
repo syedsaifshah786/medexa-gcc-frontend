@@ -23,7 +23,7 @@ function HighlightedText({ content, highlight }: Pick<TranscriptLine, "content" 
 
 export default function GCCTranscript({ lines }: { lines: TranscriptLine[] }) {
   return (
-    <div aria-label="Live conversation transcript" className="mx-auto mt-2.5 w-full space-y-2 text-left">
+    <div aria-label="Live conversation transcript" className="mx-auto mt-3 w-full max-w-[620px] space-y-2 text-left">
       {lines.map((line) => (
         <div key={`${line.time}-${line.speaker}`} className="grid grid-cols-[40px_minmax(0,1fr)] items-baseline gap-1.5">
           <time className="font-mono text-[8px] text-slate-400">{line.time}</time>

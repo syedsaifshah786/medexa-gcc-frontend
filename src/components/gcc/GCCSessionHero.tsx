@@ -11,8 +11,8 @@ export default function GCCSessionHero({ timer, transcript }: { timer: string; t
   const [stopped, setStopped] = useState(false);
 
   return (
-    <section className="relative px-1 pb-0.5 pt-0.5">
-      <div className="mx-auto flex items-center justify-center gap-3.5">
+    <section className="relative mx-auto w-full max-w-[720px] px-1 pb-0.5 pt-1">
+      <div className="mx-auto flex items-center justify-center gap-5">
         <button
           type="button"
           onClick={() => {
@@ -61,8 +61,8 @@ export default function GCCSessionHero({ timer, transcript }: { timer: string; t
             <>Say <span className="text-indigo-600">Stop Recording</span>..</>
           )}
         </p>
-        <div className="mx-auto mt-1.5 flex w-full max-w-[300px] items-center justify-center gap-2.5">
-          <div className="flex h-8 w-[220px] shrink-0 items-center justify-center gap-[3px]">
+        <div className="mx-auto mt-1.5 flex w-full max-w-[380px] items-center justify-center gap-2.5 px-2">
+          <div className="flex h-9 min-w-0 flex-1 items-center justify-between sm:w-[300px] sm:flex-none">
             {bars.map((height, index) => (
               <i
                 key={`${height}-${index}`}
