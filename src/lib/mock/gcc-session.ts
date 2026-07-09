@@ -15,7 +15,7 @@ export type Suggestion = {
 export const gccSession = {
   patient: {
     name: "Samuel Thompson",
-    demographics: "58Y/M",
+    demographics: "58y/M",
     sessionProgress: "04 / 12 Sessions",
     avatar: "https://i.pravatar.cc/80?img=12",
     status: "Verified",
