@@ -7,42 +7,43 @@ import GCCInsightsSheet from "@/components/gcc/GCCInsightsSheet";
 import GCCSessionHero from "@/components/gcc/GCCSessionHero";
 import { gccSession } from "@/lib/mock/gcc-session";
 
+/* eslint-disable @next/next/no-img-element -- The prototype uses a static mocked patient avatar. */
+
 export default function GCCSessionPage() {
   const [claimFocused, setClaimFocused] = useState(false);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f3f6fb] text-slate-900">
       <GCCHeader />
-      <main className="mx-auto w-full max-w-[1060px] px-4 pb-14 pt-5 sm:px-6 sm:pt-7 lg:px-8">
-        <section className="relative z-40 mb-5 flex flex-col gap-4 rounded-[22px] border border-white/90 bg-white/70 p-3 shadow-[0_12px_38px_rgba(48,61,115,0.06)] backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:p-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <button type="button" aria-label="Go back" onClick={() => history.back()} className="grid size-9 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-500 hover:text-indigo-600">
+      <main className="mx-auto w-full max-w-[680px] px-4 pb-12 pt-4 sm:px-6 sm:pt-5">
+        <section className="relative z-40 mb-2 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <button type="button" aria-label="Go back" onClick={() => history.back()} className="grid size-8 shrink-0 place-items-center rounded-full text-slate-500 transition hover:bg-white/70 hover:text-indigo-600">
               <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg>
             </button>
-            <span className="grid size-11 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sky-200 to-indigo-300 text-xs font-extrabold text-indigo-800 ring-4 ring-white">
-              {gccSession.patient.initials}
-            </span>
+            <img src={gccSession.patient.avatar} alt="" className="size-9 shrink-0 rounded-full object-cover shadow-sm ring-2 ring-white" />
             <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-sm font-extrabold text-slate-900 sm:text-base">{gccSession.patient.name}</h1>
-                <span className="rounded-full bg-emerald-50 px-2 py-1 text-[9px] font-bold text-emerald-600">
-                  ✓ {gccSession.patient.status}
+              <div className="flex min-w-0 items-center gap-1.5">
+                <h1 className="truncate text-xs font-extrabold text-slate-900 sm:text-[13px]">{gccSession.patient.name}</h1>
+                <span className="shrink-0 text-[9px] font-semibold text-slate-400">{gccSession.patient.demographics}</span>
+                <span
+                  title={gccSession.patient.status}
+                  aria-label={gccSession.patient.status}
+                  className="grid size-3.5 shrink-0 place-items-center rounded-full bg-emerald-500 text-white"
+                >
+                  <svg viewBox="0 0 12 12" className="size-2.5" aria-hidden="true">
+                    <path d="m3 6 2 2 4-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
+                  </svg>
                 </span>
               </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-[10px] font-medium text-slate-400">
-                <span>{gccSession.patient.demographics}</span>
-                <i className="size-1 rounded-full bg-slate-300" />
-                <span>{gccSession.patient.sessionProgress}</span>
-                <i className="size-1 rounded-full bg-slate-300" />
-                <span className="text-indigo-500">GCC Session</span>
-              </div>
+              <p className="mt-0.5 text-[9px] font-medium text-slate-400">{gccSession.patient.sessionProgress}</p>
             </div>
           </div>
 
           <GCCClaimQualityDropdown compactScore={gccSession.claimQuality} />
         </section>
 
-        <div className="space-y-5">
+        <div className="space-y-4">
           <GCCSessionHero timer={gccSession.recordingTime} transcript={[...gccSession.transcript]} />
           <GCCInsightsSheet
             count={gccSession.suggestionsCount}

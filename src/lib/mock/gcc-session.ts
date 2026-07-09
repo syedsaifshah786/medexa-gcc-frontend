@@ -17,10 +17,10 @@ export const gccSession = {
     name: "Samuel Thompson",
     demographics: "58Y/M",
     sessionProgress: "04 / 12 Sessions",
-    initials: "ST",
+    avatar: "https://i.pravatar.cc/80?img=12",
     status: "Verified",
   },
-  claimQuality: 86,
+  claimQuality: 98,
   recordingTime: "20:02",
   suggestionsCount: 16,
   transcript: [

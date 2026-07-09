@@ -4,16 +4,15 @@ import { useState } from "react";
 import GCCTranscript from "@/components/gcc/GCCTranscript";
 import type { TranscriptLine } from "@/lib/mock/gcc-session";
 
-const bars = [12, 20, 15, 30, 21, 38, 19, 26, 44, 31, 17, 37, 26, 48, 32, 21, 40, 27, 16, 33, 22, 42, 29, 18, 35, 24, 14];
+const bars = [8, 15, 11, 24, 16, 31, 14, 21, 35, 24, 12, 29, 20, 38, 25, 16, 32, 21, 11, 26, 17, 34, 23, 13, 28, 19, 9];
 
 export default function GCCSessionHero({ timer, transcript }: { timer: string; transcript: TranscriptLine[] }) {
   const [paused, setPaused] = useState(false);
   const [stopped, setStopped] = useState(false);
 
   return (
-    <section className="relative overflow-hidden rounded-[28px] border border-white/80 bg-white/76 px-4 py-8 shadow-[0_18px_55px_rgba(48,61,115,0.09)] backdrop-blur-xl sm:px-8 sm:py-9">
-      <div className="pointer-events-none absolute inset-0 opacity-40 [background-image:radial-gradient(#7f86df_0.7px,transparent_0.7px)] [background-size:14px_14px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_72%)]" />
-      <div className="relative mx-auto flex max-w-xl items-center justify-center gap-5 sm:gap-12">
+    <section className="relative px-2 pb-1 pt-1 sm:pt-2">
+      <div className="mx-auto flex items-center justify-center gap-5">
         <button
           type="button"
           onClick={() => {
@@ -21,21 +20,21 @@ export default function GCCSessionHero({ timer, transcript }: { timer: string; t
             setStopped(false);
           }}
           aria-label={paused ? "Resume recording" : "Pause recording"}
-          className="grid size-12 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-lg shadow-indigo-100 transition hover:-translate-y-0.5 sm:size-14"
+          className="grid size-9 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_6px_18px_rgba(79,70,229,0.13)] transition hover:-translate-y-0.5"
         >
           {paused ? (
-            <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true"><path d="m9 7 8 5-8 5Z" fill="currentColor" /></svg>
+            <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true"><path d="m9 7 8 5-8 5Z" fill="currentColor" /></svg>
           ) : (
-            <span className="flex gap-1"><i className="h-4 w-[3px] rounded bg-current" /><i className="h-4 w-[3px] rounded bg-current" /></span>
+            <span className="flex gap-1"><i className="h-3 w-0.5 rounded bg-current" /><i className="h-3 w-0.5 rounded bg-current" /></span>
           )}
         </button>
 
-        <div className="relative grid size-32 place-items-center sm:size-40">
-          <span className="absolute inset-0 rounded-full border border-indigo-200/70 animate-[ping_2.6s_ease-out_infinite]" />
-          <span className="absolute inset-4 rounded-full border border-dashed border-indigo-200 bg-indigo-50/60" />
-          <span className="absolute inset-8 rounded-full bg-indigo-100/70 blur-[1px]" />
-          <div className={`relative grid size-16 place-items-center rounded-full text-white shadow-[0_15px_35px_rgba(78,70,229,0.36)] sm:size-20 ${stopped ? "bg-slate-400" : "bg-gradient-to-br from-[#7467ff] to-[#4539dc]"}`}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="size-7">
+        <div className="relative grid size-[136px] place-items-center">
+          <span className="absolute inset-0 rounded-full border border-indigo-200/60 animate-[ping_2.6s_ease-out_infinite]" />
+          <span className="absolute inset-[13px] rounded-full border border-dashed border-indigo-200/90 bg-indigo-50/45" />
+          <span className="absolute inset-[27px] rounded-full bg-indigo-100/55 blur-[1px]" />
+          <div className={`relative grid size-16 place-items-center rounded-full text-white shadow-[0_12px_30px_rgba(78,70,229,0.34)] ${stopped ? "bg-slate-400" : "bg-gradient-to-br from-[#7467ff] to-[#4539dc]"}`}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6">
               <rect x="8" y="3.5" width="8" height="12" rx="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
               <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
             </svg>
@@ -46,26 +45,40 @@ export default function GCCSessionHero({ timer, transcript }: { timer: string; t
           type="button"
           onClick={() => setStopped(true)}
           aria-label="Stop recording"
-          className="grid size-12 place-items-center rounded-full border border-rose-100 bg-white text-rose-500 shadow-lg shadow-rose-100 transition hover:-translate-y-0.5 sm:size-14"
+          className="grid size-9 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_6px_18px_rgba(79,70,229,0.13)] transition hover:-translate-y-0.5"
         >
-          <span className="size-4 rounded-[4px] bg-current" />
+          <span className="size-3 rounded-[3px] bg-current" />
         </button>
       </div>
 
-      <div className="relative mt-3 text-center">
-        <p className="text-[11px] font-semibold tracking-wide text-slate-400">
-          {stopped ? "Recording stopped" : paused ? "Recording paused" : "Say “Stop Recording”"}
+      <div className="mt-1 text-center">
+        <p className="text-[10px] font-semibold tracking-wide text-slate-400">
+          {stopped ? (
+            "Recording stopped"
+          ) : paused ? (
+            "Recording paused"
+          ) : (
+            <>Say <span className="text-indigo-600">Stop Recording</span>..</>
+          )}
         </p>
-        <div className="mx-auto mt-4 flex h-12 max-w-sm items-center justify-center gap-[4px]">
-          {bars.map((height, index) => (
-            <i
-              key={`${height}-${index}`}
-              className={`w-[3px] rounded-full bg-gradient-to-t from-indigo-400 to-sky-400 ${paused || stopped ? "opacity-35" : "gcc-wave-bar"}`}
-              style={{ height, animationDelay: `${index * 45}ms` }}
-            />
-          ))}
+        <div className="mx-auto mt-2 flex w-full max-w-[330px] items-center justify-center gap-3">
+          <div className="flex h-10 w-[240px] shrink-0 items-center justify-center gap-[3px]">
+            {bars.map((height, index) => (
+              <i
+                key={`${height}-${index}`}
+                className={`w-0.5 rounded-full bg-gradient-to-t from-indigo-500 to-sky-400 ${paused || stopped ? "opacity-35" : "gcc-wave-bar"}`}
+                style={{ height, animationDelay: `${index * 45}ms` }}
+              />
+            ))}
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 font-mono text-[10px] font-bold text-slate-600">
+            <svg viewBox="0 0 24 24" className="size-3 text-indigo-500" aria-hidden="true">
+              <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.8" />
+              <path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+            </svg>
+            {timer}
+          </span>
         </div>
-        <strong className="mt-2 block font-mono text-2xl tracking-[0.08em] text-slate-800">{timer}</strong>
         <GCCTranscript lines={transcript} />
       </div>
     </section>

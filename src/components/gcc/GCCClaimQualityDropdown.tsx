@@ -40,25 +40,31 @@ export default function GCCClaimQualityDropdown({ compactScore }: GCCClaimQualit
   }, [open]);
 
   return (
-    <div ref={containerRef} className="relative z-[70] w-full sm:w-auto">
+    <div ref={containerRef} className="relative z-[70] shrink-0">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-controls="gcc-claim-quality-panel"
-        className="flex w-full items-center justify-between gap-4 rounded-2xl border border-indigo-100 bg-white px-4 py-2.5 text-left shadow-sm transition hover:border-indigo-200 hover:shadow-md sm:min-w-48"
+        className="flex h-[48px] w-[148px] items-center gap-2 rounded-xl border border-white/90 bg-white px-2.5 text-left shadow-[0_7px_20px_rgba(48,61,115,0.09)] transition hover:border-indigo-100 hover:shadow-md"
       >
-        <span>
-          <small className="block text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400">Claim Quality</small>
-          <strong className="mt-0.5 block text-xs text-slate-700">Good documentation</strong>
+        <span className="relative grid size-7 shrink-0 place-items-center rounded-lg bg-indigo-50 text-indigo-600">
+          <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true">
+            <path d="M7 3.5h7.5L18 7v13H7Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.7" />
+            <path d="M14 3.5V7h4M10 11h5M10 14.5h5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+          </svg>
+          <i className="absolute -right-0.5 -top-0.5 size-2 rounded-full border-2 border-white bg-emerald-500" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <strong className="block whitespace-nowrap text-[9px] font-extrabold text-slate-700">Claim Quality</strong>
         </span>
         <span
-          className="relative grid size-12 place-items-center rounded-full"
+          className="relative grid size-9 shrink-0 place-items-center rounded-full"
           style={{ background: `conic-gradient(#4f46e5 0 ${compactScore}%, #e9eaf7 ${compactScore}% 100%)` }}
         >
-          <i className="absolute inset-[5px] rounded-full bg-white" />
-          <b className="relative text-xs text-indigo-700">{compactScore}%</b>
+          <i className="absolute inset-[4px] rounded-full bg-white" />
+          <b className="relative text-[9px] text-indigo-700">{compactScore}%</b>
         </span>
       </button>
 
