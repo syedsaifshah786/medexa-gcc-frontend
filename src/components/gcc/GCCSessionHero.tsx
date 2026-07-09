@@ -11,7 +11,7 @@ export default function GCCSessionHero({ timer, transcript }: { timer: string; t
   const [stopped, setStopped] = useState(false);
 
   return (
-    <section className="relative mx-auto w-full max-w-[720px] px-1 pb-0.5 pt-1">
+    <section className="relative w-full px-1 pb-0.5 pt-1">
       <div className="mx-auto flex items-center justify-center gap-5">
         <button
           type="button"

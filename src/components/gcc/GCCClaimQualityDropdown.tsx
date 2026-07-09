@@ -47,20 +47,20 @@ export default function GCCClaimQualityDropdown({ compactScore }: GCCClaimQualit
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-controls="gcc-claim-quality-panel"
-        className="flex h-[38px] w-32 items-center gap-1.5 rounded-[10px] border border-white/90 bg-white px-2 text-left shadow-[0_5px_14px_rgba(48,61,115,0.09)] transition hover:border-indigo-100 hover:shadow-md"
+        className="flex h-11 w-[148px] items-center gap-2 rounded-xl border border-white/90 bg-white px-2.5 text-left shadow-[0_6px_16px_rgba(48,61,115,0.09)] transition hover:border-indigo-100 hover:shadow-md"
       >
-        <span className="relative grid size-[22px] shrink-0 place-items-center rounded-md bg-indigo-50 text-indigo-600">
-          <svg viewBox="0 0 24 24" className="size-3" aria-hidden="true">
+        <span className="relative grid size-6 shrink-0 place-items-center rounded-md bg-indigo-50 text-indigo-600">
+          <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true">
             <path d="M7 3.5h7.5L18 7v13H7Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.7" />
             <path d="M14 3.5V7h4M10 11h5M10 14.5h5" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
           </svg>
           <i className="absolute -right-0.5 -top-0.5 size-1.5 rounded-full border border-white bg-emerald-500" />
         </span>
         <span className="min-w-0 flex-1">
-          <strong className="block whitespace-nowrap text-[8px] font-extrabold text-slate-700">Claim Quality</strong>
+          <strong className="block whitespace-nowrap text-[9px] font-extrabold text-slate-700">Claim Quality</strong>
         </span>
         <span
-          className="relative grid size-7 shrink-0 place-items-center rounded-full"
+          className="relative grid size-8 shrink-0 place-items-center rounded-full"
           style={{ background: `conic-gradient(#4f46e5 0 ${compactScore}%, #e9eaf7 ${compactScore}% 100%)` }}
         >
           <i className="absolute inset-[3px] rounded-full bg-white" />

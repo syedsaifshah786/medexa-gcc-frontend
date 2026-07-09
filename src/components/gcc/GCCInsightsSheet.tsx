@@ -17,7 +17,7 @@ export default function GCCInsightsSheet({ count, suggestions, claimFocused, onC
     : [suggestions[0].id, suggestions[1].id, "claim", suggestions[2].id];
 
   return (
-    <section aria-labelledby="insights-title" className="relative mx-auto w-full max-w-[660px]">
+    <section aria-labelledby="insights-title" className="relative w-full">
       <div className="mb-2 flex items-center justify-between px-0.5">
         <div className="flex min-w-0 items-center">
           <h2 id="insights-title" className="truncate text-[9px] font-semibold text-slate-500">Medexa is Processing for Insights...</h2>
@@ -31,7 +31,7 @@ export default function GCCInsightsSheet({ count, suggestions, claimFocused, onC
           <span className="h-1 w-10 rounded-full bg-slate-300/90" />
         </div>
         <div className="gcc-insights-scroll relative h-[500px] overflow-y-auto overscroll-contain px-3 pb-4 sm:px-5">
-          <div className="mx-auto grid w-full max-w-[620px] gap-2.5">
+          <div className="grid w-full gap-2.5">
             {ordered.map((id) =>
               id === "claim" ? (
                 <GCCClaimReadinessCard key={id} focused={claimFocused} onFocus={onClaimFocus} />
