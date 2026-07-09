@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import GCCTranscript from "@/components/gcc/GCCTranscript";
+import type { TranscriptLine } from "@/lib/mock/gcc-session";
 
 const bars = [12, 20, 15, 30, 21, 38, 19, 26, 44, 31, 17, 37, 26, 48, 32, 21, 40, 27, 16, 33, 22, 42, 29, 18, 35, 24, 14];
 
-export default function GCCSessionHero({ timer }: { timer: string }) {
+export default function GCCSessionHero({ timer, transcript }: { timer: string; transcript: TranscriptLine[] }) {
   const [paused, setPaused] = useState(false);
   const [stopped, setStopped] = useState(false);
 
@@ -64,6 +66,7 @@ export default function GCCSessionHero({ timer }: { timer: string }) {
           ))}
         </div>
         <strong className="mt-2 block font-mono text-2xl tracking-[0.08em] text-slate-800">{timer}</strong>
+        <GCCTranscript lines={transcript} />
       </div>
     </section>
   );

@@ -2,7 +2,7 @@ export type TranscriptLine = {
   time: string;
   speaker: "Dr. Sarah" | "Samuel";
   content: string;
-  highlight?: string;
+  highlight?: string | readonly string[];
 };
 
 export type Suggestion = {
@@ -25,21 +25,25 @@ export const gccSession = {
   suggestionsCount: 16,
   transcript: [
     {
-      time: "19:42",
+      time: "12:04",
       speaker: "Dr. Sarah",
-      content: "Tell me where the discomfort is strongest today.",
+      content: "And how long has this been occurring?",
     },
     {
-      time: "19:48",
+      time: "12:10",
       speaker: "Samuel",
-      content: "It starts in my lower back, especially after sitting for a while.",
-      highlight: "lower back",
+      content: "It started about three weeks ago, mostly in the evenings after I finish working.",
     },
     {
-      time: "19:56",
+      time: "12:18",
+      speaker: "Dr. Sarah",
+      content: "Does the pain radiate down towards the hip or remain centralized?",
+    },
+    {
+      time: "12:25",
       speaker: "Samuel",
-      content: "Sometimes there is a sharp twinge near my right hip when I stand.",
-      highlight: "sharp twinge near my right hip",
+      content: "It mostly stays in my lower back but sometimes I feel a sharp twinge near my right hip.",
+      highlight: ["lower back", "sharp twinge", "right hip"],
     },
   ] satisfies TranscriptLine[],
   suggestions: [

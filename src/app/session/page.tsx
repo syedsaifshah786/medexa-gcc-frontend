@@ -4,7 +4,6 @@ import { useState } from "react";
 import GCCHeader from "@/components/gcc/GCCHeader";
 import GCCInsightsSheet from "@/components/gcc/GCCInsightsSheet";
 import GCCSessionHero from "@/components/gcc/GCCSessionHero";
-import GCCTranscript from "@/components/gcc/GCCTranscript";
 import { gccSession } from "@/lib/mock/gcc-session";
 
 export default function GCCSessionPage() {
@@ -57,8 +56,7 @@ export default function GCCSessionPage() {
         </section>
 
         <div className="space-y-5">
-          <GCCSessionHero timer={gccSession.recordingTime} />
-          <GCCTranscript lines={[...gccSession.transcript]} />
+          <GCCSessionHero timer={gccSession.recordingTime} transcript={[...gccSession.transcript]} />
           <GCCInsightsSheet
             count={gccSession.suggestionsCount}
             suggestions={[...gccSession.suggestions]}
