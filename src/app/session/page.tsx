@@ -15,35 +15,35 @@ export default function GCCSessionPage() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f3f6fb] text-slate-900">
       <GCCHeader />
-      <main className="mx-auto w-full max-w-[680px] px-4 pb-12 pt-4 sm:px-6 sm:pt-5">
-        <section className="relative z-40 mb-2 flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <button type="button" aria-label="Go back" onClick={() => history.back()} className="grid size-8 shrink-0 place-items-center rounded-full text-slate-500 transition hover:bg-white/70 hover:text-indigo-600">
-              <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg>
+      <main className="mx-auto w-full max-w-[420px] px-4 pb-10 pt-3">
+        <section className="relative z-40 mb-1.5 flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <button type="button" aria-label="Go back" onClick={() => history.back()} className="grid size-7 shrink-0 place-items-center rounded-full text-slate-500 transition hover:bg-white/70 hover:text-indigo-600">
+              <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true"><path d="m15 6-6 6 6 6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" /></svg>
             </button>
-            <img src={gccSession.patient.avatar} alt="" className="size-9 shrink-0 rounded-full object-cover shadow-sm ring-2 ring-white" />
+            <img src={gccSession.patient.avatar} alt="" className="size-8 shrink-0 rounded-full object-cover shadow-sm ring-2 ring-white" />
             <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <h1 className="truncate text-xs font-extrabold text-slate-900 sm:text-[13px]">{gccSession.patient.name}</h1>
-                <span className="shrink-0 text-[9px] font-semibold text-slate-400">{gccSession.patient.demographics}</span>
+              <div className="flex min-w-0 items-center gap-1">
+                <h1 className="truncate text-[11px] font-extrabold text-slate-900">{gccSession.patient.name}</h1>
+                <span className="shrink-0 text-[8px] font-semibold text-slate-400">{gccSession.patient.demographics}</span>
                 <span
                   title={gccSession.patient.status}
                   aria-label={gccSession.patient.status}
-                  className="grid size-3.5 shrink-0 place-items-center rounded-full bg-emerald-500 text-white"
+                  className="grid size-3 shrink-0 place-items-center rounded-full bg-emerald-500 text-white"
                 >
-                  <svg viewBox="0 0 12 12" className="size-2.5" aria-hidden="true">
+                  <svg viewBox="0 0 12 12" className="size-2" aria-hidden="true">
                     <path d="m3 6 2 2 4-4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
                   </svg>
                 </span>
               </div>
-              <p className="mt-0.5 text-[9px] font-medium text-slate-400">{gccSession.patient.sessionProgress}</p>
+              <p className="mt-0.5 text-[8px] font-medium text-slate-400">{gccSession.patient.sessionProgress}</p>
             </div>
           </div>
 
           <GCCClaimQualityDropdown compactScore={gccSession.claimQuality} />
         </section>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           <GCCSessionHero timer={gccSession.recordingTime} transcript={[...gccSession.transcript]} />
           <GCCInsightsSheet
             count={gccSession.suggestionsCount}

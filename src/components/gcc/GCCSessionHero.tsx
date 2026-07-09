@@ -4,15 +4,15 @@ import { useState } from "react";
 import GCCTranscript from "@/components/gcc/GCCTranscript";
 import type { TranscriptLine } from "@/lib/mock/gcc-session";
 
-const bars = [8, 15, 11, 24, 16, 31, 14, 21, 35, 24, 12, 29, 20, 38, 25, 16, 32, 21, 11, 26, 17, 34, 23, 13, 28, 19, 9];
+const bars = [7, 13, 10, 21, 14, 27, 12, 18, 31, 21, 10, 25, 17, 33, 22, 14, 28, 18, 10, 23, 15, 30, 20, 11, 25, 17, 8];
 
 export default function GCCSessionHero({ timer, transcript }: { timer: string; transcript: TranscriptLine[] }) {
   const [paused, setPaused] = useState(false);
   const [stopped, setStopped] = useState(false);
 
   return (
-    <section className="relative px-2 pb-1 pt-1 sm:pt-2">
-      <div className="mx-auto flex items-center justify-center gap-5">
+    <section className="relative px-1 pb-0.5 pt-0.5">
+      <div className="mx-auto flex items-center justify-center gap-3.5">
         <button
           type="button"
           onClick={() => {
@@ -20,7 +20,7 @@ export default function GCCSessionHero({ timer, transcript }: { timer: string; t
             setStopped(false);
           }}
           aria-label={paused ? "Resume recording" : "Pause recording"}
-          className="grid size-9 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_6px_18px_rgba(79,70,229,0.13)] transition hover:-translate-y-0.5"
+          className="grid size-8 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_5px_14px_rgba(79,70,229,0.13)] transition hover:-translate-y-0.5"
         >
           {paused ? (
             <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true"><path d="m9 7 8 5-8 5Z" fill="currentColor" /></svg>
@@ -29,12 +29,12 @@ export default function GCCSessionHero({ timer, transcript }: { timer: string; t
           )}
         </button>
 
-        <div className="relative grid size-[136px] place-items-center">
+        <div className="relative grid size-28 place-items-center">
           <span className="absolute inset-0 rounded-full border border-indigo-200/60 animate-[ping_2.6s_ease-out_infinite]" />
-          <span className="absolute inset-[13px] rounded-full border border-dashed border-indigo-200/90 bg-indigo-50/45" />
-          <span className="absolute inset-[27px] rounded-full bg-indigo-100/55 blur-[1px]" />
-          <div className={`relative grid size-16 place-items-center rounded-full text-white shadow-[0_12px_30px_rgba(78,70,229,0.34)] ${stopped ? "bg-slate-400" : "bg-gradient-to-br from-[#7467ff] to-[#4539dc]"}`}>
-            <svg viewBox="0 0 24 24" aria-hidden="true" className="size-6">
+          <span className="absolute inset-3 rounded-full border border-dashed border-indigo-200/90 bg-indigo-50/45" />
+          <span className="absolute inset-6 rounded-full bg-indigo-100/55 blur-[1px]" />
+          <div className={`relative grid size-14 place-items-center rounded-full text-white shadow-[0_10px_25px_rgba(78,70,229,0.34)] ${stopped ? "bg-slate-400" : "bg-gradient-to-br from-[#7467ff] to-[#4539dc]"}`}>
+            <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5">
               <rect x="8" y="3.5" width="8" height="12" rx="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
               <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
             </svg>
@@ -45,9 +45,9 @@ export default function GCCSessionHero({ timer, transcript }: { timer: string; t
           type="button"
           onClick={() => setStopped(true)}
           aria-label="Stop recording"
-          className="grid size-9 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_6px_18px_rgba(79,70,229,0.13)] transition hover:-translate-y-0.5"
+          className="grid size-8 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_5px_14px_rgba(79,70,229,0.13)] transition hover:-translate-y-0.5"
         >
-          <span className="size-3 rounded-[3px] bg-current" />
+          <span className="size-2.5 rounded-[3px] bg-current" />
         </button>
       </div>
 
@@ -61,8 +61,8 @@ export default function GCCSessionHero({ timer, transcript }: { timer: string; t
             <>Say <span className="text-indigo-600">Stop Recording</span>..</>
           )}
         </p>
-        <div className="mx-auto mt-2 flex w-full max-w-[330px] items-center justify-center gap-3">
-          <div className="flex h-10 w-[240px] shrink-0 items-center justify-center gap-[3px]">
+        <div className="mx-auto mt-1.5 flex w-full max-w-[300px] items-center justify-center gap-2.5">
+          <div className="flex h-8 w-[220px] shrink-0 items-center justify-center gap-[3px]">
             {bars.map((height, index) => (
               <i
                 key={`${height}-${index}`}
