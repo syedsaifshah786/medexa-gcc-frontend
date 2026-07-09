@@ -1,0 +1,256 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f7f8fc;
+  --foreground: #111827;
+  --medexa-primary: #5146f5;
+  --medexa-primary-strong: #3525db;
+  --medexa-accent: #22c55e;
+  --medexa-bg: #f7f8fc;
+  --medexa-card: #ffffff;
+  --medexa-border: #e5e7eb;
+  --medexa-text: #111827;
+  --medexa-muted: #6b7280;
+  --medexa-shadow: 0 18px 45px rgba(28, 35, 90, 0.1);
+  --medexa-shadow-soft: 0 10px 26px rgba(28, 35, 90, 0.07);
+  --medexa-radius: 16px;
+  --medexa-radius-sm: 10px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--medexa-bg);
+  overflow-x: hidden;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[role="button"]:focus-visible {
+  outline: 3px solid rgba(81, 70, 245, 0.18);
+  outline-offset: 3px;
+}
+
+::selection {
+  background: rgba(81, 70, 245, 0.18);
+}
+
+@keyframes gcc-wave {
+  0%,
+  100% {
+    transform: scaleY(0.62);
+    opacity: 0.66;
+  }
+  50% {
+    transform: scaleY(1.08);
+    opacity: 1;
+  }
+}
+
+.gcc-wave-bar {
+  animation: gcc-wave 0.9s ease-in-out infinite;
+  transform-origin: center;
+}
+
+.gcc-insights-shell {
+  box-shadow:
+    0 -8px 50px rgba(46, 125, 112, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 0 0 1px rgba(167, 243, 208, 0.2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gcc-wave-bar {
+    animation: none;
+  }
+}
+
+.ambient-page,
+.session-page {
+  background:
+    radial-gradient(circle at 18% 2%, rgba(81, 70, 245, 0.08), transparent 30%),
+    linear-gradient(180deg, #f7f8fc 0%, #eef2f7 100%) !important;
+  color: var(--medexa-text) !important;
+  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif !important;
+}
+
+.content,
+.soap-content,
+.billing-content,
+.summary-content,
+.claim-content,
+.session-content {
+  background:
+    radial-gradient(circle at 82% 0%, rgba(34, 197, 94, 0.05), transparent 28%),
+    rgba(255, 255, 255, 0.46) !important;
+}
+
+.session-card,
+.transcripts-card,
+.transcript-detail,
+.session-summary,
+.note-card,
+.summary-card,
+.metric-card,
+.cpt-card,
+.snf-section,
+.content-section,
+.claim-top,
+.recording-card,
+.suggestions-panel,
+.speech-card,
+.patient-strip,
+.procedure-popup {
+  border-color: rgba(81, 70, 245, 0.13) !important;
+  box-shadow: var(--medexa-shadow-soft) !important;
+}
+
+.session-card,
+.transcript-row,
+.summary-card,
+.note-card,
+.metric-card,
+.cpt-card,
+.content-section,
+.diagnosis-card,
+.suggestion-card,
+.insight-card {
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.session-card:hover,
+.transcript-row:hover,
+.summary-card:hover,
+.note-card:hover,
+.metric-card:hover,
+.cpt-card:hover,
+.content-section:hover,
+.diagnosis-card:hover,
+.suggestion-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--medexa-shadow) !important;
+}
+
+.tab-active,
+.badge-summarized,
+.status-badge.approved,
+.listening-badge.is-recording,
+.recording-status.is-recording {
+  box-shadow: 0 8px 18px rgba(34, 197, 94, 0.11);
+}
+
+html[dir="rtl"] body {
+  text-align: right;
+}
+
+html[dir="rtl"] input,
+html[dir="rtl"] textarea,
+html[dir="rtl"] select {
+  text-align: right;
+}
+
+html[dir="rtl"] [dir="ltr"],
+html[dir="rtl"] code,
+html[dir="rtl"] .metric-card strong,
+html[dir="rtl"] .patient-meta strong {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+html[dir="rtl"] .tabs .claim-link,
+html[dir="rtl"] .medexa-actions {
+  margin-right: auto;
+  margin-left: 0;
+}
+
+html[dir="rtl"] .meta-row {
+  margin-right: 36px;
+  margin-left: 0 !important;
+}
+
+html[dir="rtl"] .title-row,
+html[dir="rtl"] .section-heading,
+html[dir="rtl"] .note-heading,
+html[dir="rtl"] .summary-header,
+html[dir="rtl"] .claim-heading,
+html[dir="rtl"] .cpt-topline {
+  text-align: right;
+}
+
+html[dir="rtl"] .review-actions,
+html[dir="rtl"] .cpt-actions,
+html[dir="rtl"] .cpt-form-actions,
+html[dir="rtl"] .stop-confirm-actions,
+html[dir="rtl"] .procedure-popup-actions {
+  justify-content: flex-start;
+}
+
+html[dir="rtl"] .procedure-popup {
+  border-right-width: 5px;
+  border-left-width: 1px;
+}
+
+html[dir="rtl"] .back-link {
+  transform: scaleX(-1);
+}
+
+@media (max-width: 760px) {
+  .content,
+  .soap-content,
+  .billing-content,
+  .summary-content,
+  .claim-content,
+  .session-content {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+
+  html[dir="rtl"] .meta-row {
+    margin-right: 36px;
+    margin-left: 0 !important;
+  }
+
+  html[dir="rtl"] .tabs .claim-link {
+    margin-right: 0;
+  }
+
+  html[dir="rtl"] .tabs,
+  html[dir="rtl"] .section-heading,
+  html[dir="rtl"] .cpt-topline,
+  html[dir="rtl"] .review-actions {
+    align-items: flex-start;
+  }
+}
