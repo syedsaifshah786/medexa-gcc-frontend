@@ -1,10 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import SlideAction from "@/components/gcc/SlideAction";
 
 export default function GCCClaimReadinessCard({ focused = false, onFocus }: { focused?: boolean; onFocus?: () => void }) {
-  const [improved, setImproved] = useState(false);
-
   return (
     <article
       onClick={onFocus}
@@ -21,19 +19,13 @@ export default function GCCClaimReadinessCard({ focused = false, onFocus }: { fo
           <p className="mt-2 text-[10px] leading-5 text-slate-400">Review the documentation prompts before closing this GCC Session.</p>
         </div>
       </div>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation();
-          setImproved((value) => !value);
-        }}
-        className={`relative mt-5 flex h-10 w-full items-center rounded-full p-1 transition ${improved ? "bg-emerald-500" : "bg-white/10"}`}
-      >
-        <span className={`grid size-8 place-items-center rounded-full bg-white text-[#282d54] shadow transition-transform ${improved ? "translate-x-[calc(100%-2rem)]" : ""}`}>
-          <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true"><path d="m8 12 2.5 2.5L16 9" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.1" /></svg>
-        </span>
-        <span className="absolute inset-0 grid place-items-center text-[10px] font-bold">{improved ? "Ready to review" : "Slide to Improve"}</span>
-      </button>
+      <SlideAction
+        label="Slide to Improve"
+        completedLabel="Improved"
+        variant="dark"
+        onComplete={() => undefined}
+        className="mt-5 w-full"
+      />
     </article>
   );
 }

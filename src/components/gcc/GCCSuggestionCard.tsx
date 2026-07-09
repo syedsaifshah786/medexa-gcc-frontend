@@ -1,10 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import SlideAction from "@/components/gcc/SlideAction";
 import type { Suggestion } from "@/lib/mock/gcc-session";
 
 export default function GCCSuggestionCard({ suggestion }: { suggestion: Suggestion }) {
-  const [approved, setApproved] = useState(false);
   const isBilling = suggestion.type === "Billing";
 
   return (
@@ -32,19 +31,12 @@ export default function GCCSuggestionCard({ suggestion }: { suggestion: Suggesti
 
       <div className="mt-4 flex items-center justify-end gap-3">
         <button type="button" className="px-2 py-2 text-[10px] font-bold text-slate-400 hover:text-slate-600">Ignore</button>
-        <button
-          type="button"
-          onClick={() => setApproved((value) => !value)}
-          className={`relative flex h-9 w-[148px] items-center rounded-full px-1 transition ${approved ? "bg-emerald-500" : "bg-slate-100"}`}
-          aria-pressed={approved}
-        >
-          <span className={`grid size-7 place-items-center rounded-full bg-white shadow-md transition-transform ${approved ? "translate-x-[112px] text-emerald-600" : "text-indigo-500"}`}>
-            <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true"><path d="m8 12 2.5 2.5L16 9" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" /></svg>
-          </span>
-          <span className={`absolute inset-0 grid place-items-center pl-5 text-[10px] font-bold ${approved ? "pr-5 text-white" : "text-slate-500"}`}>
-            {approved ? "Approved" : "Slide to Approve"}
-          </span>
-        </button>
+        <SlideAction
+          label="Slide to Approve"
+          completedLabel="Approved"
+          onComplete={() => undefined}
+          className="w-[154px]"
+        />
       </div>
     </article>
   );
