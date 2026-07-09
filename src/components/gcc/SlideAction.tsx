@@ -137,7 +137,7 @@ export default function SlideAction({
       aria-disabled={completed}
       data-slide-action
       onClick={(event) => event.stopPropagation()}
-      className={`relative h-9 select-none overflow-hidden rounded-full border shadow-[0_5px_14px_rgba(55,65,130,0.1)] ${
+      className={`relative h-8 select-none overflow-hidden rounded-full border shadow-[0_4px_12px_rgba(55,65,130,0.09)] ${
         isDark
           ? "border-white/10 bg-white/10 text-white"
           : "border-slate-200/80 bg-slate-100 text-slate-500"
@@ -152,7 +152,7 @@ export default function SlideAction({
         />
       )}
 
-      <span className="pointer-events-none absolute inset-0 grid place-items-center px-10 text-[9px] font-bold">
+      <span className="pointer-events-none absolute inset-0 grid place-items-center px-8 text-[8px] font-bold">
         {completed ? completedLabel : label}
       </span>
 
@@ -162,17 +162,17 @@ export default function SlideAction({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        className={`absolute left-1 top-1 grid size-7 place-items-center rounded-full shadow-md ${
+        className={`absolute left-1 top-1 grid size-6 place-items-center rounded-full shadow-md ${
           completed ? "cursor-default bg-white text-emerald-600" : "cursor-grab bg-gradient-to-br from-indigo-500 to-violet-500 text-white active:cursor-grabbing"
         } ${isDragging ? "" : "transition-transform duration-300 ease-out"}`}
         style={{ transform: `translateX(${progress * Math.max(0, travelDistance)}px)`, touchAction: "none" }}
       >
         {completed ? (
-          <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="size-3" aria-hidden="true">
             <path d="m7.5 12 3 3 6-6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.2" />
           </svg>
         ) : (
-          <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true">
+          <svg viewBox="0 0 24 24" className="size-3" aria-hidden="true">
             <path d="M6.5 12h11m-4-4 4 4-4 4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
           </svg>
         )}
