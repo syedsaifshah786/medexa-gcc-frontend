@@ -41,12 +41,12 @@ export default function GCCSuggestionCard({ suggestion }: { suggestion: Suggesti
         </p>
       </div>
 
-      <div className="mt-2 flex justify-end">
+      <div className="mt-2 flex justify-start">
         <SlideAction
           label="Slide to Approve"
           completedLabel="Approved"
           onComplete={() => undefined}
-          className="w-[140px]"
+          className="w-[200px] max-w-full"
         />
       </div>
     </article>
