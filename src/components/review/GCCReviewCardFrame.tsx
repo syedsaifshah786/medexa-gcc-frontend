@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import GCCEditButton from "@/components/review/GCCEditButton";
-import GCCReviewSidePreview from "@/components/review/GCCReviewSidePreview";
 
 type GCCReviewCardFrameProps = {
   title: string;
@@ -12,8 +11,7 @@ type GCCReviewCardFrameProps = {
 
 export default function GCCReviewCardFrame({ title, isEditing, onEditToggle, children, minHeightClass = "min-h-[680px]" }: GCCReviewCardFrameProps) {
   return (
-    <div className="relative mx-auto mt-9 w-full max-w-[720px]">
-      <GCCReviewSidePreview />
+    <div className="relative w-full">
       <div className="pointer-events-none absolute inset-x-7 top-4 h-full rounded-[30px] border border-[#D8DDF2]/55 bg-white/45 opacity-70" aria-hidden="true" />
       <div className="pointer-events-none absolute inset-x-12 top-8 h-full rounded-[30px] border border-[#D8DDF2]/40 bg-white/35 opacity-60" aria-hidden="true" />
       <section className={`relative rounded-[30px] bg-[linear-gradient(135deg,#55D6FF_0%,#79A8FF_28%,#C9B4FF_55%,#7DDE31_100%)] p-[1.5px] shadow-[0_28px_80px_rgba(32,45,110,0.13),0_0_28px_rgba(85,214,255,0.12)] ${minHeightClass}`}>
