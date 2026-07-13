@@ -6,7 +6,7 @@ import type { TranscriptLine } from "@/lib/mock/gcc-session";
 
 const bars = [7, 13, 10, 21, 14, 27, 12, 18, 31, 21, 10, 25, 17, 33, 22, 14, 28, 18, 10, 23, 15, 30, 20, 11, 25, 17, 8];
 
-export default function GCCSessionHero({ timer, transcript }: { timer: string; transcript: TranscriptLine[] }) {
+export default function GCCSessionHero({ timer, transcript, onStopRecording }: { timer: string; transcript: TranscriptLine[]; onStopRecording?: () => void }) {
   const [paused, setPaused] = useState(false);
   const [stopped, setStopped] = useState(false);
 
@@ -44,7 +44,10 @@ export default function GCCSessionHero({ timer, transcript }: { timer: string; t
 
           <button
             type="button"
-            onClick={() => setStopped(true)}
+            onClick={() => {
+              setStopped(true);
+              onStopRecording?.();
+            }}
             aria-label="Stop recording"
             className="absolute right-6 top-1/2 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_5px_14px_rgba(79,70,229,0.13)] transition hover:scale-105"
           >

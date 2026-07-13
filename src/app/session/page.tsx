@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import GCCClaimQualityDropdown from "@/components/gcc/GCCClaimQualityDropdown";
 import GCCHeader from "@/components/gcc/GCCHeader";
 import GCCInsightsSheet from "@/components/gcc/GCCInsightsSheet";
@@ -10,6 +11,7 @@ import { gccSession } from "@/lib/mock/gcc-session";
 /* eslint-disable @next/next/no-img-element -- The prototype uses a static mocked patient avatar. */
 
 export default function GCCSessionPage() {
+  const router = useRouter();
   const [claimFocused, setClaimFocused] = useState(false);
 
   return (
@@ -42,7 +44,7 @@ export default function GCCSessionPage() {
 
           <div className="col-start-1 row-start-3 w-full max-w-[640px] justify-self-center sm:col-span-2 sm:row-start-2 xl:col-span-1 xl:col-start-2 xl:row-start-1 xl:max-w-none">
             <div className="space-y-4">
-              <GCCSessionHero timer={gccSession.recordingTime} transcript={[...gccSession.transcript]} />
+              <GCCSessionHero timer={gccSession.recordingTime} transcript={[...gccSession.transcript]} onStopRecording={() => router.push("/soap-notes")} />
               <GCCInsightsSheet
                 count={gccSession.suggestionsCount}
                 suggestions={[...gccSession.suggestions]}
