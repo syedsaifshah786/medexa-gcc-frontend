@@ -232,21 +232,21 @@ export default function GCCAmbientDashboard() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={openDetailsModal}
-              className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 shadow-[0_8px_22px_rgba(15,23,42,0.05)] transition hover:border-indigo-200 hover:text-indigo-700"
+              className="inline-flex h-[34px] items-center gap-1.5 rounded-xl border border-indigo-200/70 bg-white px-3.5 text-[12px] font-medium text-slate-700 shadow-[0_4px_12px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-indigo-300 hover:text-slate-800"
             >
-              <UserPlusIcon className="size-4" />
+              <UserPlusIcon className="size-3.5 text-indigo-500" />
               Add new Patient
             </button>
             <button
               type="button"
               onClick={startNewSession}
-              className="inline-flex h-9 items-center gap-2 rounded-[10px] border border-indigo-200 bg-white px-3 text-sm font-bold text-[#332b8f] shadow-[0_8px_22px_rgba(81,70,245,0.08)] transition hover:border-indigo-300 hover:bg-indigo-50/70"
+              className="inline-flex h-[34px] items-center gap-1.5 rounded-xl border border-indigo-200/70 bg-white px-3.5 text-[12px] font-medium text-slate-700 shadow-[0_4px_12px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:border-indigo-300 hover:text-slate-800"
             >
-              <SparklesIcon className="size-4" />
+              <SparklesIcon className="size-3.5 text-indigo-500" />
               Start new Session
             </button>
           </div>
