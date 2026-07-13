@@ -340,18 +340,19 @@ function NewSessionCallout({ onStartSession }: { onStartSession: () => void }) {
     <button
       type="button"
       onClick={onStartSession}
-      className="group relative mb-7 mt-[22px] block h-auto w-full cursor-pointer overflow-hidden rounded-[20px] bg-[linear-gradient(90deg,#67e8f9_0%,#60a5fa_45%,#4ade80_100%)] p-[2px] text-left shadow-[0_6px_18px_rgba(34,211,238,0.1),0_2px_9px_rgba(99,102,241,0.06)] transition hover:-translate-y-px active:translate-y-0 sm:h-24 sm:rounded-[24px]"
+      className="group relative isolate mb-7 mt-[22px] block h-auto w-full cursor-pointer overflow-visible rounded-[20px] bg-[linear-gradient(135deg,#55d6ff_0%,#79a8ff_34%,#c9b4ff_58%,#77f0b2_100%)] p-[2px] text-left shadow-[0_8px_24px_rgba(88,120,255,0.1),0_0_24px_rgba(85,214,255,0.12),0_0_18px_rgba(119,240,178,0.1)] transition hover:-translate-y-px active:translate-y-0 sm:h-24 sm:rounded-[24px]"
       aria-label="Start a new Medexa session"
     >
+      <span className="pointer-events-none absolute -inset-2 -z-10 rounded-[26px] bg-[linear-gradient(135deg,rgba(85,214,255,0.22),rgba(121,168,255,0.14),rgba(201,180,255,0.18),rgba(119,240,178,0.18))] opacity-70 blur-[18px] transition group-hover:opacity-80 sm:rounded-[30px]" aria-hidden="true" />
       <span
-        className="relative flex h-full items-center gap-4 rounded-[18px] px-4 py-4 transition sm:rounded-[22px] sm:px-[22px]"
+        className="relative z-10 flex h-full items-center gap-4 overflow-hidden rounded-[18px] px-4 py-4 transition sm:rounded-[22px] sm:px-[22px]"
         style={{
           backgroundImage:
-            "radial-gradient(circle, rgba(99,102,241,0.1) 1px, transparent 1px), linear-gradient(135deg, rgba(255,255,255,0.98), rgba(239,246,255,0.9))",
-          backgroundSize: "10px 10px, 100% 100%",
+            "radial-gradient(circle, rgba(120,140,180,0.12) 1px, transparent 1px), radial-gradient(circle at top left, rgba(85,214,255,0.1), transparent 35%), radial-gradient(circle at right center, rgba(119,240,178,0.08), transparent 30%), linear-gradient(135deg, rgba(255,255,255,0.98), rgba(248,251,255,0.94))",
+          backgroundSize: "12px 12px, 100% 100%, 100% 100%, 100% 100%",
         }}
       >
-        <span className="pointer-events-none absolute -bottom-7 -left-5 size-20 rounded-full bg-cyan-300/16 blur-xl" aria-hidden="true" />
+        <span className="pointer-events-none absolute -bottom-7 -left-5 size-20 rounded-full bg-cyan-300/14 blur-xl" aria-hidden="true" />
         <span className="relative grid size-9 shrink-0 place-items-center text-cyan-400 drop-shadow-[0_0_9px_rgba(34,211,238,0.38)]">
           <SparklesIcon className="size-8 text-cyan-400" />
         </span>
