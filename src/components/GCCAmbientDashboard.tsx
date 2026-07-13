@@ -468,17 +468,15 @@ function ActionItem({ title, date, detail, context, tone }: { title: string; dat
 function UpcomingSessions({ sessions }: { sessions: SessionRecord[] }) {
   return (
     <aside className="h-fit w-full min-w-0 lg:sticky lg:top-6">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-[18px] font-medium leading-[23px] text-slate-950">Upcoming Sessions</h2>
-            <ArrowRightIcon className="size-5 text-slate-400" />
-          </div>
-          <p className="mt-[3px] text-[12px] font-medium leading-4 text-zinc-400">19 sessions remaining ahead</p>
+      <div className="w-full">
+        <div className="flex w-full items-center justify-between">
+          <h2 className="text-[18px] font-medium leading-[23px] text-slate-950">Upcoming Sessions</h2>
+          <ArrowRightIcon className="size-5 text-slate-700" />
         </div>
+        <p className="mt-[3px] text-[12px] font-medium leading-4 text-zinc-400">19 sessions remaining ahead</p>
       </div>
 
-      <div className="mt-4 flex max-h-[calc(100vh-200px)] flex-col gap-2.5 overflow-y-auto pr-1 [scrollbar-color:rgba(148,163,184,0.45)_transparent] [scrollbar-width:thin]">
+      <div className="mt-4 flex flex-col gap-2.5">
         {sessions.map((session) => (
           <SessionCard key={session.id} session={session} />
         ))}
