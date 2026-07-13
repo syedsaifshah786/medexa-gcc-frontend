@@ -39,7 +39,7 @@ const initialPatient: PatientDetails = {
   mrn: "",
 };
 
-const startSessionHref = "/ambient-listening/start-session?sessionId=new-session&autoStartRecording=1&source=manual";
+const startSessionHref = "/session";
 
 const dashboardSessions: SessionRecord[] = [
   { id: "samuel-thompson", name: "Samuel Thompson", status: "ACTIVE", nphies: "Cleared", refId: "PA-2026-00847231", avatar: "https://i.pravatar.cc/96?img=12" },
