@@ -100,20 +100,25 @@ const commandPatterns = {
     /\b(hey\s+)?medexa\s+start\s+(a\s+)?new\s+session\b/,
     /\b(hey\s+)?medexa\s+start\s+session\b/,
     /\b(hey\s+)?medexa\s+begin\s+session\b/,
+    /^start$/,
   ],
   startRecording: [
     /\b(hey\s+)?medexa\s+start\s+recording\b/,
     /\b(hey\s+)?medexa\s+start\s+session\b/,
     /\b(hey\s+)?medexa\s+resume\s+(recording|session)?\b/,
+    /^start$/,
     /\bresume\s+(recording|session)\b/,
+    /^resume$/,
   ],
   pause: [
     /\b(hey\s+)?medexa\s+pause\s+(recording|session)\b/,
     /\bpause\s+(recording|session)\b/,
+    /^pause$/,
   ],
   stop: [
     /\b(hey\s+)?medexa\s+(stop|end)\s+(recording|session)\b/,
     /\b(stop|end)\s+(recording|session)\b/,
+    /^(stop|end)$/,
   ],
 };
 
@@ -674,19 +679,19 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     }
 
     if (modeRef.current === "session-transcription" || modeRef.current === "paused-command-only") {
-      if (matchesAny(normalized, commandPatterns.stop) && (hasMedexaPrefix(normalized) || /^(stop|end)\s+(recording|session)$/.test(normalized))) {
+      if (matchesAny(normalized, commandPatterns.stop) && (hasMedexaPrefix(normalized) || /^(stop|end)(\s+(recording|session))?$/.test(normalized))) {
         markCommand("stop-recording");
         void finalizeAndNavigateToSoap();
         return true;
       }
 
-      if (matchesAny(normalized, commandPatterns.pause) && (hasMedexaPrefix(normalized) || /^pause\s+(recording|session)$/.test(normalized))) {
+      if (matchesAny(normalized, commandPatterns.pause) && (hasMedexaPrefix(normalized) || /^pause(\s+(recording|session))?$/.test(normalized))) {
         markCommand("pause-recording");
         pauseSession();
         return true;
       }
 
-      if (matchesAny(normalized, commandPatterns.startRecording) && (hasMedexaPrefix(normalized) || /^resume\s+(recording|session)$/.test(normalized))) {
+      if (matchesAny(normalized, commandPatterns.startRecording) && (hasMedexaPrefix(normalized) || /^(start|resume)(\s+(recording|session))?$/.test(normalized))) {
         markCommand("resume-recording");
         resumeSession();
         return true;

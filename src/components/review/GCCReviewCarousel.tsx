@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { useRouter } from "next/navigation";
+import ReviewSuccessModal from "@/components/gcc/ReviewSuccessModal";
 import GCCBillingReviewCard from "@/components/review/GCCBillingReviewCard";
 import GCCPatientSummaryCard from "@/components/review/GCCPatientSummaryCard";
 import GCCReviewActions from "@/components/review/GCCReviewActions";
@@ -37,6 +38,12 @@ const slideMeta = [
 
 const interactiveSelector = 'input, textarea, button, a, select, [contenteditable="true"]';
 const dragThresholdRatio = 0.22;
+const transitionMs = 420;
+
+const getRouteIndex = (pathname: string): ReviewSlideIndex => {
+  const index = routes.findIndex((route) => pathname === route || pathname.startsWith(`${route}/`));
+  return index === -1 ? 0 : (index as ReviewSlideIndex);
+};
 
 export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProps) {
   const router = useRouter();
@@ -59,6 +66,8 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
   const dragOffsetRef = useRef(0);
   const routeTimeoutRef = useRef<number | null>(null);
   const previousUserSelectRef = useRef("");
+  const hasInitializedFromPathRef = useRef(false);
+  const activeIndexRef = useRef<ReviewSlideIndex>(initialStep);
   const [activeIndex, setActiveIndex] = useState(initialStep);
   const [dragOffset, setDragOffset] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -68,6 +77,7 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
   const [reducedMotion, setReducedMotion] = useState(false);
   const [toast, setToast] = useState("");
   const [patientCompleted, setPatientCompleted] = useState(false);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const isReviewLoading = reviewStatus === "loading";
   const isReviewReady = reviewStatus === "ready" && Boolean(soapNote && billingIntelligence && patientSummary);
   const cardError = reviewStatus === "error" ? reviewError ?? "Session review data could not be loaded." : null;
@@ -85,8 +95,16 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
   );
 
   useEffect(() => {
-    setActiveIndex(initialStep);
-  }, [initialStep]);
+    activeIndexRef.current = activeIndex;
+  }, [activeIndex]);
+
+  useEffect(() => {
+    if (hasInitializedFromPathRef.current) return;
+    hasInitializedFromPathRef.current = true;
+    const routeIndex = getRouteIndex(window.location.pathname);
+    activeIndexRef.current = routeIndex;
+    setActiveIndex(routeIndex);
+  }, []);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -125,30 +143,54 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
     [],
   );
 
-  const replaceRoute = useCallback(
-    (index: number) => {
+  const updateAddressBar = useCallback(
+    (index: ReviewSlideIndex) => {
       if (routeTimeoutRef.current !== null) {
         window.clearTimeout(routeTimeoutRef.current);
       }
 
-      const delay = reducedMotion ? 0 : 180;
+      const delay = reducedMotion ? 0 : transitionMs;
       routeTimeoutRef.current = window.setTimeout(() => {
         const nextRoute = sessionId ? `${routes[index]}?sessionId=${encodeURIComponent(sessionId)}` : routes[index];
-        router.replace(nextRoute, { scroll: false });
+        window.history.replaceState({ ...window.history.state, medexaReviewStep: index }, "", nextRoute);
       }, delay);
     },
-    [reducedMotion, router, sessionId],
+    [reducedMotion, sessionId],
   );
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const routeIndex = getRouteIndex(window.location.pathname);
+      if (routeIndex === activeIndexRef.current) return;
+      setPatientCompleted(false);
+      setIsSuccessModalOpen(false);
+      setIsDragging(false);
+      setDragOffset(0);
+      dragOffsetRef.current = 0;
+      activeIndexRef.current = routeIndex;
+      setActiveIndex(routeIndex);
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   const goToIndex = useCallback(
     (nextIndex: number) => {
       const clampedIndex = Math.min(routes.length - 1, Math.max(0, nextIndex)) as ReviewSlideIndex;
-      if (clampedIndex === activeIndex) return;
+      if (clampedIndex === activeIndexRef.current) return;
       setPatientCompleted(false);
-      setActiveIndex(clampedIndex);
-      replaceRoute(clampedIndex);
+      setIsSuccessModalOpen(false);
+      setIsDragging(false);
+      window.requestAnimationFrame(() => {
+        activeIndexRef.current = clampedIndex;
+        setActiveIndex(clampedIndex);
+        setDragOffset(0);
+        dragOffsetRef.current = 0;
+      });
+      updateAddressBar(clampedIndex);
     },
-    [activeIndex, replaceRoute],
+    [updateAddressBar],
   );
 
   const endDrag = useCallback(() => {
@@ -249,12 +291,8 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
       return;
     }
 
-    if (patientCompleted) {
-      router.push("/ambient-listening");
-      return;
-    }
-
     setPatientCompleted(true);
+    setIsSuccessModalOpen(true);
   };
 
   const handleExport = () => {
@@ -283,7 +321,7 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
   };
 
   const trackOffset = viewportWidth && cardWidth ? viewportWidth / 2 - cardWidth / 2 - activeIndex * stepDistance + dragOffset : 0;
-  const transition = isDragging || reducedMotion ? "none" : "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)";
+  const transition = isDragging || reducedMotion ? "none" : `transform ${transitionMs}ms cubic-bezier(0.22, 1, 0.36, 1)`;
 
   return (
     <GCCReviewShell title={currentMeta.title} subtitle={currentMeta.subtitle} step={(activeIndex + 1) as 1 | 2 | 3}>
@@ -298,7 +336,7 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
         className="relative mt-9 w-full overflow-hidden rounded-[34px] outline-none focus-visible:ring-4 focus-visible:ring-[#5B61F6]/20"
-        style={{ touchAction: "pan-y" }}
+        style={{ touchAction: "pan-y", contain: "layout paint", cursor: isDragging ? "grabbing" : "grab" }}
       >
         <div
           className="flex items-start py-3"
@@ -306,6 +344,9 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
             gap,
             transform: `translate3d(${trackOffset}px, 0, 0)`,
             transition,
+            willChange: "transform",
+            backfaceVisibility: "hidden",
+            transformStyle: "preserve-3d",
           }}
         >
           {cards.map((card, index) => {
@@ -324,7 +365,9 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
                 style={{
                   opacity: isActive ? 1 : 0.45,
                   transform: `scale(${scale}) rotate(${rotate}deg)`,
-                  transition: reducedMotion ? "none" : "opacity 420ms cubic-bezier(0.22, 1, 0.36, 1), transform 420ms cubic-bezier(0.22, 1, 0.36, 1)",
+                  transition: reducedMotion ? "none" : `opacity ${transitionMs}ms cubic-bezier(0.22, 1, 0.36, 1), transform ${transitionMs}ms cubic-bezier(0.22, 1, 0.36, 1)`,
+                  willChange: "transform, opacity",
+                  backfaceVisibility: "hidden",
                 }}
               >
                 {card}
@@ -334,8 +377,19 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
         </div>
       </section>
 
-      <GCCReviewActions onExport={handleExport} onSend={handleSend} sendLabel={activeIndex === 2 && patientCompleted ? "Done" : "Send"} disabled={!isReviewReady} />
+      <GCCReviewActions onExport={handleExport} onSend={handleSend} sendLabel="Send" disabled={!isReviewReady} />
       {toast && <ReviewToast message={toast} />}
+      {isSuccessModalOpen && (
+        <ReviewSuccessModal
+          sessionId={sessionId}
+          onClose={() => setIsSuccessModalOpen(false)}
+          onBackHome={() => router.push("/ambient-listening")}
+          onSeeDoc={() => {
+            setIsSuccessModalOpen(false);
+            goToIndex(2);
+          }}
+        />
+      )}
     </GCCReviewShell>
   );
 }
