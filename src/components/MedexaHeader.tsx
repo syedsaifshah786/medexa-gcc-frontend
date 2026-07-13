@@ -15,7 +15,7 @@ type MedexaHeaderProps = {
 };
 
 const navItems = [
-  ["nav.ambientListing", "/ambientlistening"],
+  ["nav.ambientListing", "/ambient-listening"],
   ["nav.liveSession", "/ambient-listening/session"],
   ["nav.soapNotes", "/soap-notes"],
   ["nav.billingIntelligence", "/billing-intelligence"],
