@@ -3,15 +3,17 @@ type GCCReviewActionsProps = {
   onSend: () => void;
   sendLabel?: string;
   exportLabel?: string;
+  disabled?: boolean;
 };
 
-export default function GCCReviewActions({ onExport, onSend, sendLabel = "Send", exportLabel = "Export" }: GCCReviewActionsProps) {
+export default function GCCReviewActions({ onExport, onSend, sendLabel = "Send", exportLabel = "Export", disabled = false }: GCCReviewActionsProps) {
   return (
     <div className="mt-7 flex flex-col justify-end gap-3 sm:flex-row">
       <button
         type="button"
         onClick={onExport}
-        className="inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-full border border-[#AEB7F7] bg-white px-6 text-[15px] font-semibold text-[#080B3A] shadow-[0_8px_22px_rgba(91,97,246,0.08)] transition hover:border-[#5B61F6] sm:w-[175px]"
+        disabled={disabled}
+        className="inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-full border border-[#AEB7F7] bg-white px-6 text-[15px] font-semibold text-[#080B3A] shadow-[0_8px_22px_rgba(91,97,246,0.08)] transition hover:border-[#5B61F6] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[#AEB7F7] sm:w-[175px]"
       >
         <DownloadIcon className="size-4" />
         {exportLabel}
@@ -19,7 +21,8 @@ export default function GCCReviewActions({ onExport, onSend, sendLabel = "Send",
       <button
         type="button"
         onClick={onSend}
-        className="inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#080B3A] px-6 text-[15px] font-semibold text-white shadow-[0_14px_30px_rgba(8,11,58,0.22)] transition hover:bg-[#11165a] sm:w-[175px]"
+        disabled={disabled}
+        className="inline-flex h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#080B3A] px-6 text-[15px] font-semibold text-white shadow-[0_14px_30px_rgba(8,11,58,0.22)] transition hover:bg-[#11165a] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-[#080B3A] sm:w-[175px]"
       >
         {sendLabel}
         <ArrowIcon className="size-4" />

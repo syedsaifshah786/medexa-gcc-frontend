@@ -7,11 +7,10 @@ import GCCPatientSummaryCard from "@/components/review/GCCPatientSummaryCard";
 import GCCReviewActions from "@/components/review/GCCReviewActions";
 import GCCReviewShell from "@/components/review/GCCReviewShell";
 import GCCSoapReviewCard from "@/components/review/GCCSoapReviewCard";
-import { fetchGCCSoapNote, getSoapStorageKey, type GCCSoapNote } from "@/lib/gcc/session-api";
+import { useGCCReviewData } from "@/hooks/useGCCReviewData";
 
 type GCCReviewCarouselProps = {
   initialStep: 0 | 1 | 2;
-  sessionId?: string | null;
 };
 
 type ReviewSlideIndex = 0 | 1 | 2;
@@ -39,8 +38,19 @@ const slideMeta = [
 const interactiveSelector = 'input, textarea, button, a, select, [contenteditable="true"]';
 const dragThresholdRatio = 0.22;
 
-export default function GCCReviewCarousel({ initialStep, sessionId = null }: GCCReviewCarouselProps) {
+export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProps) {
   const router = useRouter();
+  const {
+    sessionId,
+    status: reviewStatus,
+    soapNote,
+    billingIntelligence,
+    patientSummary,
+    transcript,
+    elapsedMs,
+    error: reviewError,
+    refresh,
+  } = useGCCReviewData();
   const viewportRef = useRef<HTMLDivElement>(null);
   const firstCardRef = useRef<HTMLDivElement>(null);
   const pointerIdRef = useRef<number | null>(null);
@@ -58,20 +68,20 @@ export default function GCCReviewCarousel({ initialStep, sessionId = null }: GCC
   const [reducedMotion, setReducedMotion] = useState(false);
   const [toast, setToast] = useState("");
   const [patientCompleted, setPatientCompleted] = useState(false);
-  const [soapNote, setSoapNote] = useState<GCCSoapNote | null>(null);
-  const [isSoapLoading, setIsSoapLoading] = useState(false);
-  const [soapError, setSoapError] = useState<string | null>(null);
+  const isReviewLoading = reviewStatus === "loading";
+  const isReviewReady = reviewStatus === "ready" && Boolean(soapNote && billingIntelligence && patientSummary);
+  const cardError = reviewStatus === "error" ? reviewError ?? "Session review data could not be loaded." : null;
 
   const gap = viewportWidth < 768 ? 18 : 72;
   const stepDistance = cardWidth + gap;
   const currentMeta = slideMeta[activeIndex];
   const cards = useMemo(
     () => [
-      <GCCSoapReviewCard key="soap" soapNote={soapNote} isLoading={isSoapLoading} errorMessage={soapError} sessionId={sessionId} />,
-      <GCCBillingReviewCard key="billing" />,
-      <GCCPatientSummaryCard key="summary" completed={patientCompleted} />,
+      <GCCSoapReviewCard key="soap" soapNote={soapNote} isLoading={isReviewLoading} errorMessage={cardError} onRetry={refresh} />,
+      <GCCBillingReviewCard key="billing" billingIntelligence={billingIntelligence} isLoading={isReviewLoading} errorMessage={cardError} onRetry={refresh} />,
+      <GCCPatientSummaryCard key="summary" patientSummary={patientSummary} isLoading={isReviewLoading} errorMessage={cardError} onRetry={refresh} completed={patientCompleted} />,
     ],
-    [isSoapLoading, patientCompleted, sessionId, soapError, soapNote],
+    [billingIntelligence, cardError, isReviewLoading, patientCompleted, patientSummary, refresh, soapNote],
   );
 
   useEffect(() => {
@@ -105,54 +115,6 @@ export default function GCCReviewCarousel({ initialStep, sessionId = null }: GCC
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
-  useEffect(() => {
-    if (!sessionId) {
-      setSoapNote(null);
-      setSoapError(null);
-      setIsSoapLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-    const loadSoapNote = async () => {
-      setIsSoapLoading(true);
-      setSoapError(null);
-      let hasSoap = false;
-
-      try {
-        const cached = localStorage.getItem(getSoapStorageKey(sessionId));
-        if (cached) {
-          const parsed = JSON.parse(cached) as GCCSoapNote;
-          hasSoap = true;
-          if (isMounted) setSoapNote(parsed);
-        }
-      } catch {
-        // Ignore malformed local cache and continue to backend fetch.
-      }
-
-      try {
-        const remoteSoap = await fetchGCCSoapNote(sessionId);
-        if (remoteSoap && isMounted) {
-          hasSoap = true;
-          setSoapNote(remoteSoap);
-          localStorage.setItem(getSoapStorageKey(sessionId), JSON.stringify(remoteSoap));
-        }
-      } catch {
-        // Local cache/fallback remains visible when backend is unavailable.
-      } finally {
-        if (isMounted) {
-          setIsSoapLoading(false);
-          setSoapError(hasSoap ? null : "Generated SOAP Notes are not available for this session yet.");
-        }
-      }
-    };
-
-    void loadSoapNote();
-    return () => {
-      isMounted = false;
-    };
-  }, [sessionId]);
-
   useEffect(
     () => () => {
       if (routeTimeoutRef.current !== null) {
@@ -171,10 +133,11 @@ export default function GCCReviewCarousel({ initialStep, sessionId = null }: GCC
 
       const delay = reducedMotion ? 0 : 180;
       routeTimeoutRef.current = window.setTimeout(() => {
-        router.replace(routes[index], { scroll: false });
+        const nextRoute = sessionId ? `${routes[index]}?sessionId=${encodeURIComponent(sessionId)}` : routes[index];
+        router.replace(nextRoute, { scroll: false });
       }, delay);
     },
-    [reducedMotion, router],
+    [reducedMotion, router, sessionId],
   );
 
   const goToIndex = useCallback(
@@ -279,6 +242,8 @@ export default function GCCReviewCarousel({ initialStep, sessionId = null }: GCC
   };
 
   const handleSend = () => {
+    if (!isReviewReady) return;
+
     if (activeIndex < routes.length - 1) {
       goToIndex(activeIndex + 1);
       return;
@@ -290,6 +255,31 @@ export default function GCCReviewCarousel({ initialStep, sessionId = null }: GCC
     }
 
     setPatientCompleted(true);
+  };
+
+  const handleExport = () => {
+    if (!isReviewReady) {
+      setToast("No completed session data is available to export.");
+      return;
+    }
+
+    const payload = {
+      sessionId,
+      transcript,
+      elapsedMs,
+      soapNote,
+      billingIntelligence,
+      patientSummary,
+      exportedAt: new Date().toISOString(),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `medexa-gcc-review-${sessionId}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setToast(currentMeta.exportMessage);
   };
 
   const trackOffset = viewportWidth && cardWidth ? viewportWidth / 2 - cardWidth / 2 - activeIndex * stepDistance + dragOffset : 0;
@@ -344,7 +334,7 @@ export default function GCCReviewCarousel({ initialStep, sessionId = null }: GCC
         </div>
       </section>
 
-      <GCCReviewActions onExport={() => setToast(currentMeta.exportMessage)} onSend={handleSend} sendLabel={activeIndex === 2 && patientCompleted ? "Done" : "Send"} />
+      <GCCReviewActions onExport={handleExport} onSend={handleSend} sendLabel={activeIndex === 2 && patientCompleted ? "Done" : "Send"} disabled={!isReviewReady} />
       {toast && <ReviewToast message={toast} />}
     </GCCReviewShell>
   );

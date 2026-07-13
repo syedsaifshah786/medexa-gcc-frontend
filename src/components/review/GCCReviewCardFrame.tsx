@@ -7,9 +7,10 @@ type GCCReviewCardFrameProps = {
   onEditToggle: () => void;
   children: ReactNode;
   minHeightClass?: string;
+  editDisabled?: boolean;
 };
 
-export default function GCCReviewCardFrame({ title, isEditing, onEditToggle, children, minHeightClass = "min-h-[680px]" }: GCCReviewCardFrameProps) {
+export default function GCCReviewCardFrame({ title, isEditing, onEditToggle, children, minHeightClass = "min-h-[680px]", editDisabled = false }: GCCReviewCardFrameProps) {
   return (
     <div className="relative w-full">
       <div className="pointer-events-none absolute inset-x-7 top-4 h-full rounded-[30px] border border-[#D8DDF2]/55 bg-white/45 opacity-70" aria-hidden="true" />
@@ -25,7 +26,7 @@ export default function GCCReviewCardFrame({ title, isEditing, onEditToggle, chi
         >
           <header className="flex items-center justify-between gap-4 border-b border-[#D8DDF2] pb-4">
             <h2 className="text-[22px] font-semibold leading-7 text-[#080B3A]">{title}</h2>
-            <GCCEditButton isEditing={isEditing} onClick={onEditToggle} />
+            <GCCEditButton isEditing={isEditing} onClick={onEditToggle} disabled={editDisabled} />
           </header>
           <div className="flex-1 pt-6">{children}</div>
         </div>

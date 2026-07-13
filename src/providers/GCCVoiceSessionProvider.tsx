@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { buildFinalTranscript, removeVoiceCommands } from "@/lib/gcc/transcript-utils";
-import { finalizeGCCSession, saveSoapLocally } from "@/lib/gcc/session-api";
+import { buildReviewBundleFromFinalizeResponse, finalizeGCCSession, saveReviewBundleLocally, saveSoapLocally } from "@/lib/gcc/session-api";
 
 export type SessionStatus = "idle" | "command-listening" | "starting" | "recording" | "paused" | "stopping" | "stopped" | "error";
 export type PermissionState = "unknown" | "prompt" | "granted" | "denied";
@@ -460,7 +460,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     finalizingRef.current = true;
     stoppedRef.current = true;
     setSafeStatus("stopping");
-    setFinalizationMessage("Finalizing transcript and generating SOAP Notes...");
+    setFinalizationMessage("Finalizing transcript and generating review...");
     setFinalizationError(null);
     const id = sessionIdRef.current ?? generateSessionId();
     sessionIdRef.current = id;
@@ -494,17 +494,19 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
         elapsedMs: frozenElapsed,
       });
 
-      if (response.saved_to_store !== true || !response.soap_note) {
-        throw new Error("SOAP generation could not be completed. Your transcript has been saved.");
+      if (response.saved_to_store !== true || !response.review_bundle?.soap_note || !response.review_bundle.billing_intelligence || !response.review_bundle.patient_summary) {
+        throw new Error("Review generation could not be completed. Your transcript has been saved.");
       }
 
+      const reviewBundle = buildReviewBundleFromFinalizeResponse(response);
+      saveReviewBundleLocally(reviewBundle);
       saveSoapLocally({
         sessionId: id,
-        soapNote: response.soap_note,
+        soapNote: response.review_bundle.soap_note,
         elapsedMs: frozenElapsed,
         transcript,
         llmUsed: response.llm_used,
-        fallbackReason: response.llm_fallback_reason,
+        fallbackReason: response.fallback_reason,
       });
       setSafeStatus("stopped");
       persistSession({ status: "stopped", elapsedMs: frozenElapsed });
@@ -514,7 +516,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       const message =
         error instanceof Error
           ? error.message
-          : "SOAP generation could not be completed. Your transcript has been saved.";
+          : "Review generation could not be completed. Your transcript has been saved.";
       const failedElapsed = calculateElapsed();
       const transcript = buildFinalTranscript({
         finalTranscript: finalTranscriptRef.current,
