@@ -1,18 +1,50 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import GCCClaimQualityDropdown from "@/components/gcc/GCCClaimQualityDropdown";
 import GCCHeader from "@/components/gcc/GCCHeader";
 import GCCInsightsSheet from "@/components/gcc/GCCInsightsSheet";
 import GCCSessionHero from "@/components/gcc/GCCSessionHero";
+import { useGCCVoiceSession } from "@/hooks/useGCCVoiceSession";
 import { gccSession } from "@/lib/mock/gcc-session";
 
 /* eslint-disable @next/next/no-img-element -- The prototype uses a static mocked patient avatar. */
 
 export default function GCCSessionPage() {
-  const router = useRouter();
+  return (
+    <Suspense fallback={null}>
+      <GCCSessionPageContent />
+    </Suspense>
+  );
+}
+
+function GCCSessionPageContent() {
+  const searchParams = useSearchParams();
+  const {
+    sessionId,
+    status,
+    transcriptSegments,
+    interimTranscript,
+    formatElapsedTime,
+    elapsedMs,
+    startSession,
+    pauseSession,
+    resumeSession,
+    stopSession,
+  } = useGCCVoiceSession();
   const [claimFocused, setClaimFocused] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("autoStart") !== "1") return;
+    if (status === "recording" || status === "paused" || status === "stopping" || status === "stopped") return;
+    const requestedSessionId = searchParams.get("sessionId") ?? undefined;
+    void startSession({
+      sessionId: requestedSessionId,
+      source: searchParams.get("source") === "voice" ? "voice" : "manual",
+      preserveTranscript: Boolean(requestedSessionId && requestedSessionId === sessionId),
+    });
+  }, [searchParams, sessionId, startSession, status]);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_50%_18%,rgba(224,231,255,0.5),transparent_34%),#f3f6fb] text-slate-900">
@@ -44,7 +76,18 @@ export default function GCCSessionPage() {
 
           <div className="col-start-1 row-start-3 w-full max-w-[640px] justify-self-center sm:col-span-2 sm:row-start-2 xl:col-span-1 xl:col-start-2 xl:row-start-1 xl:max-w-none">
             <div className="space-y-4">
-              <GCCSessionHero timer={gccSession.recordingTime} transcript={[...gccSession.transcript]} onStopRecording={() => router.push("/soap-notes")} />
+              <GCCSessionHero
+                timer={formatElapsedTime(elapsedMs)}
+                transcript={[]}
+                segments={transcriptSegments}
+                interimTranscript={interimTranscript}
+                status={status}
+                onStartRecording={() => void startSession({ sessionId: sessionId ?? undefined, source: "manual", preserveTranscript: true })}
+                onPauseRecording={pauseSession}
+                onResumeRecording={resumeSession}
+                onStopRecording={stopSession}
+                formatTimestamp={formatElapsedTime}
+              />
               <GCCInsightsSheet
                 count={gccSession.suggestionsCount}
                 suggestions={[...gccSession.suggestions]}

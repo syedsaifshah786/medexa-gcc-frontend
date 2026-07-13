@@ -1,14 +1,35 @@
-"use client";
-
-import { useState } from "react";
 import GCCTranscript from "@/components/gcc/GCCTranscript";
 import type { TranscriptLine } from "@/lib/mock/gcc-session";
+import type { SessionStatus, TranscriptSegment } from "@/providers/GCCVoiceSessionProvider";
 
 const bars = [7, 13, 10, 21, 14, 27, 12, 18, 31, 21, 10, 25, 17, 33, 22, 14, 28, 18, 10, 23, 15, 30, 20, 11, 25, 17, 8];
 
-export default function GCCSessionHero({ timer, transcript, onStopRecording }: { timer: string; transcript: TranscriptLine[]; onStopRecording?: () => void }) {
-  const [paused, setPaused] = useState(false);
-  const [stopped, setStopped] = useState(false);
+export default function GCCSessionHero({
+  timer,
+  transcript,
+  segments,
+  interimTranscript,
+  status,
+  onStartRecording,
+  onPauseRecording,
+  onResumeRecording,
+  onStopRecording,
+  formatTimestamp,
+}: {
+  timer: string;
+  transcript?: TranscriptLine[];
+  segments?: TranscriptSegment[];
+  interimTranscript?: string;
+  status: SessionStatus;
+  onStartRecording: () => void;
+  onPauseRecording: () => void;
+  onResumeRecording: () => void;
+  onStopRecording: () => void;
+  formatTimestamp: (timestampMs: number) => string;
+}) {
+  const paused = status === "paused";
+  const stopped = status === "stopped" || status === "stopping";
+  const recording = status === "recording";
 
   return (
     <section className="relative w-full px-1 pb-0.5 pt-1">
@@ -17,8 +38,13 @@ export default function GCCSessionHero({ timer, transcript, onStopRecording }: {
           <button
             type="button"
             onClick={() => {
-              setPaused((value) => !value);
-              setStopped(false);
+              if (paused) {
+                onResumeRecording();
+              } else if (recording) {
+                onPauseRecording();
+              } else {
+                onStartRecording();
+              }
             }}
             aria-label={paused ? "Resume recording" : "Pause recording"}
             className="absolute left-6 top-1/2 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_5px_14px_rgba(79,70,229,0.13)] transition hover:scale-105"
@@ -44,10 +70,7 @@ export default function GCCSessionHero({ timer, transcript, onStopRecording }: {
 
           <button
             type="button"
-            onClick={() => {
-              setStopped(true);
-              onStopRecording?.();
-            }}
+            onClick={onStopRecording}
             aria-label="Stop recording"
             className="absolute right-6 top-1/2 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_5px_14px_rgba(79,70,229,0.13)] transition hover:scale-105"
           >
@@ -57,9 +80,9 @@ export default function GCCSessionHero({ timer, transcript, onStopRecording }: {
 
         <p className="text-[10px] font-semibold tracking-wide text-slate-400">
           {stopped ? (
-            "Recording stopped"
+            "Session Completed"
           ) : paused ? (
-            "Recording paused"
+            <>Session Paused &mdash; Say <span className="text-indigo-600">Resume Recording</span></>
           ) : (
             <>Say <span className="text-indigo-600">Stop Recording</span>..</>
           )}
@@ -69,7 +92,7 @@ export default function GCCSessionHero({ timer, transcript, onStopRecording }: {
             {bars.map((height, index) => (
               <i
                 key={`${height}-${index}`}
-                className={`w-0.5 rounded-full bg-gradient-to-t from-indigo-500 to-sky-400 ${paused || stopped ? "opacity-35" : "gcc-wave-bar"}`}
+                className={`w-0.5 rounded-full bg-gradient-to-t from-indigo-500 to-sky-400 ${recording ? "gcc-wave-bar" : "opacity-35"}`}
                 style={{ height, animationDelay: `${index * 45}ms` }}
               />
             ))}
@@ -82,7 +105,7 @@ export default function GCCSessionHero({ timer, transcript, onStopRecording }: {
             {timer}
           </span>
         </div>
-        <GCCTranscript lines={transcript} />
+        <GCCTranscript lines={transcript} segments={segments} interimTranscript={interimTranscript} formatTimestamp={formatTimestamp} />
       </div>
     </section>
   );

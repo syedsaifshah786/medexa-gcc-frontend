@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { DoctorProvider } from "@/components/DoctorContext";
 import { LanguageProvider } from "@/context/LanguageContext";
+import { GCCVoiceSessionProvider } from "@/providers/GCCVoiceSessionProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -33,7 +34,9 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <LanguageProvider>
-          <DoctorProvider>{children}</DoctorProvider>
+          <DoctorProvider>
+            <GCCVoiceSessionProvider>{children}</GCCVoiceSessionProvider>
+          </DoctorProvider>
         </LanguageProvider>
       </body>
     </html>

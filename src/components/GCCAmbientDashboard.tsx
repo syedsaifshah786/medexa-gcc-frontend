@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import GCCHeader from "@/components/gcc/GCCHeader";
+import { useGCCVoiceSession } from "@/hooks/useGCCVoiceSession";
 
 /* eslint-disable @next/next/no-img-element -- Prototype dashboard uses static mocked patient avatars. */
 
@@ -38,8 +39,6 @@ const initialPatient: PatientDetails = {
   dob: "",
   mrn: "",
 };
-
-const startSessionHref = "/session";
 
 const dashboardSessions: SessionRecord[] = [
   { id: "samuel-thompson", name: "Samuel Thompson", status: "Active", nphies: "Cleared", refId: "PA-2026-00847231", avatar: "https://i.pravatar.cc/96?img=12" },
@@ -82,6 +81,14 @@ const cx = (...classes: Array<string | false | null | undefined>) => classes.fil
 
 export default function GCCAmbientDashboard() {
   const router = useRouter();
+  const {
+    permissionStatus,
+    status: voiceStatus,
+    errorMessage: voiceError,
+    enableVoiceControl,
+    startAmbientCommandListening,
+    startSession,
+  } = useGCCVoiceSession();
   const [modalStep, setModalStep] = useState<ModalStep>("none");
   const [patientDetails, setPatientDetails] = useState<PatientDetails>(initialPatient);
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -116,6 +123,12 @@ export default function GCCAmbientDashboard() {
     const timeoutId = window.setTimeout(() => setToast(""), 3200);
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
+
+  useEffect(() => {
+    if (permissionStatus === "granted") {
+      void startAmbientCommandListening();
+    }
+  }, [permissionStatus, startAmbientCommandListening]);
 
   const validateDetails = useCallback((details: PatientDetails) => {
     const nextErrors: FieldErrors = {};
@@ -204,8 +217,10 @@ export default function GCCAmbientDashboard() {
     closeModal();
   };
 
-  const startNewSession = () => {
-    router.push(startSessionHref);
+  const startNewSession = async () => {
+    const id = await startSession({ source: "manual" });
+    if (!id) return;
+    router.push(`/session?sessionId=${encodeURIComponent(id)}&autoStart=1&source=manual`);
   };
 
   return (
@@ -223,6 +238,16 @@ export default function GCCAmbientDashboard() {
                 </p>
               </div>
             </section>
+            <VoiceControlStatus
+              permissionStatus={permissionStatus}
+              voiceStatus={voiceStatus}
+              errorMessage={voiceError}
+              onEnable={async () => {
+                if (await enableVoiceControl()) {
+                  await startAmbientCommandListening();
+                }
+              }}
+            />
             <DashboardActionButtons onAddPatient={openDetailsModal} onStartSession={startNewSession} className="mt-4 lg:hidden" />
             <NewSessionCallout onStartSession={startNewSession} />
             <OperationalHealth />
@@ -361,6 +386,40 @@ function NewSessionCallout({ onStartSession }: { onStartSession: () => void }) {
           <span className="block text-[14px] font-normal leading-5 text-[#666b78] sm:whitespace-nowrap sm:text-[15px]">Say &quot;Hey Medexa, start session with David Peter&quot;</span>
         </span>
       </span>
+    </button>
+  );
+}
+
+function VoiceControlStatus({
+  permissionStatus,
+  voiceStatus,
+  errorMessage,
+  onEnable,
+}: {
+  permissionStatus: "unknown" | "prompt" | "granted" | "denied";
+  voiceStatus: string;
+  errorMessage: string | null;
+  onEnable: () => void;
+}) {
+  if (permissionStatus === "granted" && voiceStatus === "command-listening") {
+    return <p className="mt-3 text-[12px] font-medium text-emerald-600">Voice control ready</p>;
+  }
+
+  if (permissionStatus === "denied") {
+    return <p className="mt-3 text-[12px] font-medium text-rose-600">Microphone permission is required for Medexa voice commands.</p>;
+  }
+
+  if (errorMessage) {
+    return <p className="mt-3 text-[12px] font-medium text-amber-600">{errorMessage}</p>;
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onEnable}
+      className="mt-3 inline-flex h-8 items-center rounded-full border border-indigo-200 bg-white px-3 text-[12px] font-medium text-indigo-700 shadow-[0_4px_12px_rgba(15,23,42,0.04)] transition hover:border-indigo-300"
+    >
+      Enable Voice Control
     </button>
   );
 }
