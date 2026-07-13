@@ -14,10 +14,27 @@ type MedexaHeaderProps = {
   onSearchChange: (value: string) => void;
 };
 
-const navItems = [
-  ["nav.ambientListing", "/ambient-listening"],
-  ["nav.liveSession", "/session"],
-  ["nav.home", "/"],
+const navigationItems = [
+  {
+    label: "Ambient Listening",
+    href: "/ambient-listening",
+  },
+  {
+    label: "Live Session",
+    href: "/session",
+  },
+  {
+    label: "SOAP Notes",
+    href: "/soap-notes",
+  },
+  {
+    label: "Billing Intelligence",
+    href: "/billing-intelligence",
+  },
+  {
+    label: "Patient Summary",
+    href: "/patient-summary",
+  },
 ] as const;
 
 const notifications = [
@@ -135,14 +152,14 @@ export default function MedexaHeader({ searchValue, onSearchChange }: MedexaHead
                   {t("header.close")}
                 </button>
               </div>
-              {navItems.map(([label, href]) => (
+              {navigationItems.map(({ label, href }) => (
                 <Link
                   key={href}
                   href={href}
-                  className={pathname === href || (href !== "/" && pathname.startsWith(href)) ? "is-active" : ""}
+                  className={pathname === href || pathname.startsWith(`${href}/`) ? "is-active" : ""}
                   onClick={() => setIsMenuOpen(false)}
                 >
-                  {t(label)}
+                  {label}
                 </Link>
               ))}
             </nav>
