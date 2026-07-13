@@ -211,42 +211,26 @@ export default function GCCAmbientDashboard() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f7f8fc] text-slate-900">
       <GCCHeader />
-      <main className="mx-auto w-[calc(100%-48px)] max-w-[680px] pb-10 pt-7 lg:max-w-[1180px]">
-        <div className="grid grid-cols-1 items-start justify-center gap-y-6 lg:grid-cols-[minmax(0,590px)_380px] lg:gap-x-12">
+      <main className="mx-auto w-full max-w-[760px] px-3.5 pb-8 pt-6 sm:px-5 md:px-7 lg:max-w-[1320px] xl:px-8">
+        <div className="grid w-full grid-cols-1 items-start gap-y-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.85fr)] lg:gap-x-7 xl:gap-x-9">
           <div className="min-w-0">
-            <section className="mb-7">
-              <p className="mb-1 text-[22px] font-normal leading-7 text-[#171717] sm:text-[26px] sm:leading-8">Good Evening,</p>
+            <section>
+              <p className="mb-1 text-[23px] font-normal leading-7 text-[#171717]">Good Evening,</p>
               <div className="flex flex-col items-start sm:flex-row sm:items-end">
-                <h1 className="text-[46px] font-light leading-[50px] tracking-[-1px] text-[#101010] sm:text-[58px] sm:leading-[62px] sm:tracking-[-1.5px]">Dr. Sarah</h1>
-                <p className="mt-1 text-[15px] font-medium leading-5 text-zinc-500 sm:mb-[7px] sm:ml-5 sm:mt-0 sm:text-[18px] sm:leading-6">
+                <h1 className="text-[42px] font-light leading-[46px] tracking-[-1px] text-[#101010] sm:text-[50px] sm:leading-[54px]">Dr. Sarah</h1>
+                <p className="mt-1 text-[15px] font-medium leading-5 text-zinc-500 sm:mb-[5px] sm:ml-4 sm:mt-0 sm:text-[16px] sm:leading-[21px]">
                   {currentDate}
                 </p>
               </div>
             </section>
+            <DashboardActionButtons onAddPatient={openDetailsModal} onStartSession={startNewSession} className="mt-4 lg:hidden" />
             <NewSessionCallout onStartSession={startNewSession} />
             <OperationalHealth />
             <DueActionItems />
           </div>
 
-          <div className="min-w-0">
-            <div className="mb-7 flex flex-wrap items-center gap-2.5 lg:justify-end">
-              <button
-                type="button"
-                onClick={openDetailsModal}
-                className="inline-flex h-[38px] items-center gap-2 rounded-full border border-indigo-300/60 bg-white px-4 text-[12px] font-medium text-slate-800 shadow-[0_4px_12px_rgba(15,23,42,0.06)] transition hover:-translate-y-px hover:border-indigo-400 sm:h-[42px] sm:text-[14px]"
-              >
-                <UserPlusIcon className="size-4 text-indigo-500" />
-                Add new Patient
-              </button>
-              <button
-                type="button"
-                onClick={startNewSession}
-                className="inline-flex h-[38px] items-center gap-2 rounded-full border border-indigo-300/60 bg-white px-4 text-[12px] font-medium text-slate-800 shadow-[0_4px_12px_rgba(15,23,42,0.06)] transition hover:-translate-y-px hover:border-indigo-400 sm:h-[42px] sm:text-[14px]"
-              >
-                <SparklesIcon className="size-4 text-indigo-500" />
-                Start new Session
-              </button>
-            </div>
+          <div className="w-full min-w-0">
+            <DashboardActionButtons onAddPatient={openDetailsModal} onStartSession={startNewSession} className="mb-6 hidden lg:flex lg:justify-end" />
             <UpcomingSessions sessions={sessions} />
           </div>
         </div>
@@ -356,27 +340,45 @@ function NewSessionCallout({ onStartSession }: { onStartSession: () => void }) {
     <button
       type="button"
       onClick={onStartSession}
-      className="group relative mb-10 block h-auto min-h-[105px] w-full cursor-pointer overflow-hidden rounded-[22px] bg-[linear-gradient(90deg,#67e8f9_0%,#60a5fa_45%,#4ade80_100%)] p-[2px] text-left shadow-[0_8px_22px_rgba(34,211,238,0.13),0_3px_12px_rgba(99,102,241,0.08)] transition hover:-translate-y-px active:translate-y-0 sm:h-28 sm:rounded-[28px]"
+      className="group relative mb-7 mt-[22px] block h-auto w-full cursor-pointer overflow-hidden rounded-[20px] bg-[linear-gradient(90deg,#67e8f9_0%,#60a5fa_45%,#4ade80_100%)] p-[2px] text-left shadow-[0_6px_18px_rgba(34,211,238,0.1),0_2px_9px_rgba(99,102,241,0.06)] transition hover:-translate-y-px active:translate-y-0 sm:h-24 sm:rounded-[24px]"
       aria-label="Start a new Medexa session"
     >
       <span
-        className="relative flex h-full items-center gap-5 rounded-[20px] px-[18px] py-[18px] transition sm:rounded-[26px] sm:px-[26px] sm:py-5"
+        className="relative flex h-full items-center gap-4 rounded-[18px] px-4 py-4 transition sm:rounded-[22px] sm:px-[22px]"
         style={{
           backgroundImage:
-            "radial-gradient(circle, rgba(99,102,241,0.12) 1px, transparent 1px), linear-gradient(135deg, rgba(255,255,255,0.98), rgba(239,246,255,0.9))",
+            "radial-gradient(circle, rgba(99,102,241,0.1) 1px, transparent 1px), linear-gradient(135deg, rgba(255,255,255,0.98), rgba(239,246,255,0.9))",
           backgroundSize: "10px 10px, 100% 100%",
         }}
       >
-        <span className="pointer-events-none absolute -bottom-8 -left-6 size-24 rounded-full bg-cyan-300/20 blur-xl" aria-hidden="true" />
-        <span className="relative grid size-12 shrink-0 place-items-center text-cyan-400 drop-shadow-[0_0_12px_rgba(34,211,238,0.45)]">
-          <SparklesIcon className="size-9 text-cyan-400" />
+        <span className="pointer-events-none absolute -bottom-7 -left-5 size-20 rounded-full bg-cyan-300/16 blur-xl" aria-hidden="true" />
+        <span className="relative grid size-9 shrink-0 place-items-center text-cyan-400 drop-shadow-[0_0_9px_rgba(34,211,238,0.38)]">
+          <SparklesIcon className="size-8 text-cyan-400" />
         </span>
         <span className="relative min-w-0">
-          <span className="mb-1 block text-[20px] font-bold leading-[25px] text-[#171717] sm:text-[24px] sm:leading-[29px]">Starting a new session?</span>
-          <span className="block text-[15px] font-normal leading-5 text-[#666b78] sm:text-[18px] sm:leading-6">Say &quot;Hey Medexa, start session with David Peter&quot;</span>
+          <span className="mb-1 block text-[20px] font-bold leading-[24px] text-[#171717] sm:text-[21px] sm:leading-[25px]">Starting a new session?</span>
+          <span className="block text-[14px] font-normal leading-5 text-[#666b78] sm:whitespace-nowrap sm:text-[15px]">Say &quot;Hey Medexa, start session with David Peter&quot;</span>
         </span>
       </span>
     </button>
+  );
+}
+
+function DashboardActionButtons({ onAddPatient, onStartSession, className }: { onAddPatient: () => void; onStartSession: () => void; className?: string }) {
+  const buttonClass =
+    "inline-flex h-[38px] items-center gap-2 rounded-[19px] border border-indigo-300/60 bg-white px-3.5 text-[13px] font-medium text-slate-800 shadow-[0_4px_12px_rgba(15,23,42,0.05)] transition hover:-translate-y-px hover:border-indigo-400";
+
+  return (
+    <div className={cx("flex flex-wrap items-center gap-2", className)}>
+      <button type="button" onClick={onAddPatient} className={buttonClass}>
+        <UserPlusIcon className="size-3.5 text-indigo-500" />
+        Add new Patient
+      </button>
+      <button type="button" onClick={onStartSession} className={buttonClass}>
+        <SparklesIcon className="size-3.5 text-indigo-500" />
+        Start new Session
+      </button>
+    </div>
   );
 }
 
@@ -385,12 +387,12 @@ function OperationalHealth() {
     <section>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="mb-1.5 text-[17px] font-normal leading-[22px] text-[#737373]">Operational Health Score</h2>
-          <div className="flex items-end gap-3">
-            <span className="text-[42px] font-bold leading-[46px] tracking-[-1px] text-slate-950">
-              94.8<span className="ml-1 align-super text-[17px] font-medium tracking-normal text-slate-400">%</span>
+          <h2 className="mb-[5px] text-[15px] font-normal leading-5 text-[#737373]">Operational Health Score</h2>
+          <div className="flex items-end gap-2.5">
+            <span className="text-[38px] font-bold leading-[42px] tracking-[-1px] text-slate-950">
+              94.8<span className="ml-1 align-super text-[14px] font-medium tracking-normal text-slate-400">%</span>
             </span>
-            <span className="mb-2 inline-flex h-6 items-center gap-1 rounded-full bg-emerald-50 px-2.5 text-xs font-semibold text-emerald-700">
+            <span className="mb-2 inline-flex h-[22px] items-center gap-1 rounded-full bg-emerald-50 px-2 text-[11px] font-semibold text-emerald-700">
               <ArrowUpIcon className="size-3" />
               2.4%
             </span>
@@ -398,7 +400,7 @@ function OperationalHealth() {
         </div>
       </div>
 
-      <div className="mt-6 grid max-w-[450px] grid-cols-1 gap-3.5 sm:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
         {metrics.map((metric) => (
           <MetricCard key={metric.label} label={metric.label} value={metric.value} />
         ))}
@@ -409,26 +411,26 @@ function OperationalHealth() {
 
 function MetricCard({ label, value }: { label: string; value: string }) {
   return (
-    <article className="min-h-[84px] rounded-[12px] border border-slate-200 bg-white px-3.5 py-[13px] shadow-[0_4px_12px_rgba(15,23,42,0.03)] sm:w-[214px]">
+    <article className="min-h-[72px] rounded-[10px] border border-slate-200 bg-white px-3 py-[11px] shadow-[0_4px_12px_rgba(15,23,42,0.03)]">
       <div className="flex items-start justify-between gap-2">
-        <h3 className="text-[12px] font-medium leading-[16px] text-slate-500">{label}</h3>
-        <InfoIcon className="size-[15px] shrink-0 text-slate-400" />
+        <h3 className="text-[11px] font-medium leading-[14px] text-slate-500">{label}</h3>
+        <InfoIcon className="size-3.5 shrink-0 text-slate-400" />
       </div>
-      <p className="mt-3 text-[25px] font-bold leading-[29px] text-[#5865f2]">{value}</p>
+      <p className="mt-[5px] text-[22px] font-bold leading-6 text-[#5865f2]">{value}</p>
     </article>
   );
 }
 
 function DueActionItems() {
   return (
-    <section className="mt-[30px] overflow-hidden rounded-[14px] border border-slate-200 bg-white shadow-[0_8px_20px_rgba(15,23,42,0.045)]">
-      <div className="flex h-[58px] items-center justify-between gap-3 px-[22px]">
+    <section className="mt-6 overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-[0_7px_18px_rgba(15,23,42,0.04)]">
+      <div className="flex h-12 items-center justify-between gap-3 px-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-[16px] font-semibold leading-5 text-slate-950">Your Due Action Items</h2>
-          <span className="grid size-[23px] place-items-center rounded-full bg-amber-100 text-[11px] font-bold text-amber-700">7</span>
+          <h2 className="text-[14px] font-semibold leading-[18px] text-slate-950">Your Due Action Items</h2>
+          <span className="grid size-[21px] place-items-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-700">7</span>
         </div>
         <button type="button" aria-label="Due action menu" className="grid size-7 place-items-center rounded-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">
-          <MoreHorizontalIcon className="size-[18px]" />
+          <MoreHorizontalIcon className="size-4" />
         </button>
       </div>
 
@@ -438,7 +440,7 @@ function DueActionItems() {
         ))}
       </div>
 
-      <button type="button" className="m-2 h-[43px] w-[calc(100%-16px)] rounded-[7px] bg-indigo-50 text-[15px] font-semibold text-indigo-700 transition hover:bg-indigo-100">
+      <button type="button" className="m-2 h-9 w-[calc(100%-16px)] rounded-[7px] bg-indigo-50 text-[13px] font-semibold text-indigo-700 transition hover:bg-indigo-100">
         See All Due Actions
       </button>
     </section>
@@ -447,36 +449,36 @@ function DueActionItems() {
 
 function ActionItem({ title, date, detail, context, tone }: { title: string; date: string; detail: string; context: string; tone: "warning" | "success" }) {
   return (
-    <article className="flex min-h-[82px] items-center border-t border-[#eceef4] px-[18px] py-3.5">
-      <span className={cx("mr-3.5 h-[39px] w-[7px] shrink-0 rounded-[6px]", tone === "warning" ? "bg-amber-400" : "bg-emerald-500")} />
+    <article className="flex min-h-[66px] items-center border-t border-[#eceef4] px-3.5 py-2.5">
+      <span className={cx("mr-3 h-8 w-1.5 shrink-0 rounded-[6px]", tone === "warning" ? "bg-amber-400" : "bg-emerald-500")} />
       <div className="min-w-0 flex-1">
-        <h3 className="truncate text-[15px] font-medium leading-5 text-slate-900">{title}</h3>
-        <p className="mt-1 truncate text-[12px] font-medium leading-[17px] text-[#707783]">
+        <h3 className="truncate text-[13px] font-medium leading-[17px] text-slate-900">{title}</h3>
+        <p className="mt-[3px] truncate text-[11px] font-medium leading-[15px] text-[#707783]">
           {date} <span className="px-1 text-slate-300">&bull;</span> {detail} <span className="px-1 text-slate-300">&bull;</span> {context}
         </p>
       </div>
       <button type="button" aria-label={`${title} menu`} className="grid size-7 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">
-        <MoreHorizontalIcon className="size-[18px]" />
+        <MoreHorizontalIcon className="size-4" />
       </button>
-      <ChevronRightIcon className="size-[18px] shrink-0 text-slate-300" />
+      <ChevronRightIcon className="size-4 shrink-0 text-slate-300" />
     </article>
   );
 }
 
 function UpcomingSessions({ sessions }: { sessions: SessionRecord[] }) {
   return (
-    <aside className="h-fit lg:sticky lg:top-6">
+    <aside className="h-fit w-full min-w-0 lg:sticky lg:top-6">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-[20px] font-medium leading-[26px] text-slate-950">Upcoming Sessions</h2>
-            <ArrowRightIcon className="size-[21px] text-slate-400" />
+            <h2 className="text-[18px] font-medium leading-[23px] text-slate-950">Upcoming Sessions</h2>
+            <ArrowRightIcon className="size-5 text-slate-400" />
           </div>
-          <p className="mt-[3px] text-[14px] font-medium leading-5 text-zinc-400">19 sessions remaining ahead</p>
+          <p className="mt-[3px] text-[12px] font-medium leading-4 text-zinc-400">19 sessions remaining ahead</p>
         </div>
       </div>
 
-      <div className="mt-5 flex max-h-[calc(100vh-225px)] flex-col gap-3.5 overflow-y-auto pr-[5px] [scrollbar-color:rgba(148,163,184,0.45)_transparent] [scrollbar-width:thin]">
+      <div className="mt-4 flex max-h-[calc(100vh-200px)] flex-col gap-2.5 overflow-y-auto pr-1 [scrollbar-color:rgba(148,163,184,0.45)_transparent] [scrollbar-width:thin]">
         {sessions.map((session) => (
           <SessionCard key={session.id} session={session} />
         ))}
@@ -489,29 +491,29 @@ function SessionCard({ session }: { session: SessionRecord }) {
   const statusTone = getStatusTone(session.status);
 
   return (
-    <article className="flex min-h-[132px] items-center gap-3.5 rounded-[14px] border border-[#e5e7eb] bg-white px-[18px] py-[17px] shadow-[0_6px_18px_rgba(15,23,42,0.04)]">
+    <article className="flex min-h-[106px] items-center gap-3 rounded-[12px] border border-[#e5e7eb] bg-white px-[15px] py-[13px] shadow-[0_5px_15px_rgba(15,23,42,0.035)]">
       {session.avatar ? (
-        <img src={session.avatar} alt="" className="size-[46px] shrink-0 rounded-full object-cover ring-2 ring-white" />
+        <img src={session.avatar} alt="" className="size-10 shrink-0 rounded-full object-cover ring-2 ring-white" />
       ) : (
-        <span className="grid size-[46px] shrink-0 place-items-center rounded-full bg-indigo-50 text-sm font-bold text-indigo-700 ring-2 ring-white">{getInitials(session.name)}</span>
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700 ring-2 ring-white">{getInitials(session.name)}</span>
       )}
       <div className="min-w-0 flex-1">
         <div>
-          <h3 className="truncate text-[18px] font-semibold leading-[22px] text-slate-950">{session.name}</h3>
-          <p className="mt-1 inline-flex items-center gap-1.5 text-[13px] font-medium leading-4 text-slate-500">
+          <h3 className="truncate text-[16px] font-semibold leading-5 text-slate-950">{session.name}</h3>
+          <p className="mt-1 inline-flex items-center gap-1.5 text-[12px] font-medium leading-4 text-slate-500">
             <span className={cx("size-1.5 rounded-full", statusTone.dot)} />
             {session.status}
           </p>
         </div>
-        <div className="mt-[15px] space-y-2">
-          <p className="flex items-center gap-1.5 text-[14px] font-medium leading-5 text-slate-500">
+        <div className="mt-2.5 space-y-[5px]">
+          <p className="flex items-center gap-1.5 text-[12px] font-medium leading-4 text-slate-500">
             <span className={cx("size-[7px] rounded-full", getNphiesDotTone(session.nphies))} />
             NPHIES: <span className={getNphiesTone(session.nphies)}>{session.nphies}</span>
           </p>
-          {session.refId && <p className="text-[13px] font-medium leading-[18px] text-slate-500">Ref ID: {session.refId}</p>}
+          {session.refId && <p className="text-[11px] font-medium leading-[15px] text-slate-500">Ref ID: {session.refId}</p>}
         </div>
       </div>
-      <ChevronRightIcon className="size-[18px] shrink-0 text-slate-300" />
+      <ChevronRightIcon className="size-4 shrink-0 text-slate-300" />
     </article>
   );
 }
