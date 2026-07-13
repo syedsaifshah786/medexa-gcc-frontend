@@ -93,16 +93,7 @@ export default function GCCAmbientDashboard() {
 
   const sessions = useMemo(() => [...createdSessions, ...dashboardSessions], [createdSessions]);
   const maxDob = useMemo(() => todayInputValue(), []);
-  const currentDate = useMemo(
-    () =>
-      new Intl.DateTimeFormat("en", {
-        weekday: "long",
-        month: "short",
-        day: "2-digit",
-        year: "numeric",
-      }).format(new Date()),
-    [],
-  );
+  const currentDate = "Tuesday, Jul 13, 2026";
 
   useEffect(() => {
     if (modalStep === "none") {
@@ -220,13 +211,13 @@ export default function GCCAmbientDashboard() {
   return (
     <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_50%_18%,rgba(224,231,255,0.5),transparent_34%),#f3f6fb] text-slate-900">
       <GCCHeader />
-      <main className="mx-auto w-full max-w-[1220px] px-4 pb-12 pt-5 sm:px-6 lg:px-8">
-        <section className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <main className="mx-auto w-full max-w-[1220px] px-5 pb-12 pt-8 sm:px-7 lg:px-8">
+        <section className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-500">Good Evening,</p>
-            <div className="mt-1 flex flex-wrap items-end gap-x-3 gap-y-1">
-              <h1 className="text-[34px] font-extrabold leading-none text-[#332b8f] sm:text-[38px]">Dr. Sarah</h1>
-              <p className="pb-1 text-sm font-medium text-slate-500" suppressHydrationWarning>
+            <p className="text-[38px] font-normal leading-[1.1] text-slate-950 sm:text-[42px]">Good Evening,</p>
+            <div className="mt-2 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:gap-7">
+              <h1 className="text-[48px] font-normal leading-none text-slate-950 sm:text-[72px] lg:text-[82px]">Dr. Sarah</h1>
+              <p className="pb-1 text-[22px] font-normal leading-tight text-slate-500 sm:pb-2 sm:text-[28px] lg:text-[30px]">
                 {currentDate}
               </p>
             </div>
@@ -252,7 +243,7 @@ export default function GCCAmbientDashboard() {
           </div>
         </section>
 
-        <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,3fr)_minmax(330px,2fr)]">
+        <div className="mt-14 grid grid-cols-1 gap-5 lg:mt-16 lg:grid-cols-[minmax(0,3fr)_minmax(330px,2fr)]">
           <div className="min-w-0 space-y-5">
             <NewSessionCallout onStartSession={startNewSession} />
             <OperationalHealth />
@@ -367,17 +358,25 @@ function NewSessionCallout({ onStartSession }: { onStartSession: () => void }) {
     <button
       type="button"
       onClick={onStartSession}
-      className="group relative block w-full cursor-pointer overflow-hidden rounded-[14px] border border-emerald-200/70 bg-white p-[1px] text-left shadow-[0_12px_34px_rgba(27,75,98,0.08)] transition hover:-translate-y-0.5 hover:border-emerald-300/80 hover:shadow-[0_16px_38px_rgba(27,75,98,0.1)] active:translate-y-0 active:shadow-[0_8px_24px_rgba(27,75,98,0.08)]"
+      className="group relative block w-full cursor-pointer overflow-hidden rounded-[30px] bg-[linear-gradient(90deg,#67e8f9_0%,#60a5fa_35%,#818cf8_55%,#4ade80_100%)] p-[2px] text-left shadow-[0_12px_35px_rgba(34,211,238,0.18),0_0_18px_rgba(99,102,241,0.14),0_0_22px_rgba(74,222,128,0.12)] transition hover:-translate-y-0.5 hover:shadow-[0_16px_42px_rgba(34,211,238,0.22),0_0_24px_rgba(99,102,241,0.16),0_0_28px_rgba(74,222,128,0.15)] active:translate-y-0 sm:rounded-[42px] sm:p-[3px]"
       aria-label="Start a new Medexa session"
     >
-      <div className="absolute inset-0 bg-[linear-gradient(105deg,rgba(81,70,245,0.14),rgba(34,197,94,0.12),transparent_70%)]" />
-      <span className="relative flex items-center gap-3 rounded-[13px] bg-white/92 px-4 py-4 transition group-hover:bg-white">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full border border-indigo-100 bg-indigo-50 text-indigo-600 shadow-inner transition group-hover:border-indigo-200">
-          <SparklesIcon className="size-5 animate-pulse" />
+      <span
+        className="relative flex min-h-[auto] items-center gap-5 rounded-[28px] px-6 py-6 transition sm:min-h-[166px] sm:gap-8 sm:rounded-[39px] sm:px-10 lg:px-12"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle, rgba(99,102,241,0.12) 1px, transparent 1px), linear-gradient(135deg, rgba(255,255,255,0.98), rgba(239,246,255,0.9))",
+          backgroundSize: "12px 12px, 100% 100%",
+        }}
+      >
+        <span className="pointer-events-none absolute -bottom-10 -left-8 size-32 rounded-full bg-cyan-300/25 blur-2xl" aria-hidden="true" />
+        <span className="pointer-events-none absolute -right-10 bottom-0 size-28 rounded-full bg-emerald-300/20 blur-2xl" aria-hidden="true" />
+        <span className="relative grid size-14 shrink-0 place-items-center text-cyan-400 drop-shadow-[0_0_18px_rgba(34,211,238,0.55)] sm:size-16">
+          <SparklesIcon className="size-12 text-cyan-400 sm:size-14" />
         </span>
-        <span className="min-w-0">
-          <span className="block text-base font-extrabold text-slate-950">Starting a new session?</span>
-          <span className="mt-1 block text-sm font-medium text-slate-500">Say &lsquo;Hey Medexa, start session with David Peter&rsquo;</span>
+        <span className="relative min-w-0">
+          <span className="block text-[24px] font-bold leading-tight text-slate-950 sm:text-[34px] lg:text-[36px]">Starting a new session?</span>
+          <span className="mt-2 block text-[17px] font-normal leading-snug text-slate-500 sm:text-[27px] lg:text-[29px]">Say &quot;Hey Medexa, start session with David Peter&quot;</span>
         </span>
       </span>
     </button>
