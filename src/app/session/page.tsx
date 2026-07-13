@@ -26,12 +26,15 @@ function GCCSessionPageContent() {
     status,
     transcriptSegments,
     interimTranscript,
+    finalizationMessage,
+    finalizationError,
     formatElapsedTime,
     elapsedMs,
     startSession,
     pauseSession,
     resumeSession,
     stopSession,
+    retryFinalize,
   } = useGCCVoiceSession();
   const [claimFocused, setClaimFocused] = useState(false);
 
@@ -88,6 +91,24 @@ function GCCSessionPageContent() {
                 onStopRecording={stopSession}
                 formatTimestamp={formatElapsedTime}
               />
+              {(finalizationMessage || finalizationError) && (
+                <div className="rounded-[14px] border border-indigo-100 bg-white/92 p-3 text-center shadow-[0_12px_30px_rgba(15,23,42,0.08)]">
+                  {finalizationMessage && <p className="text-[12px] font-bold text-indigo-700">{finalizationMessage}</p>}
+                  {finalizationError && (
+                    <>
+                      <p className="text-[12px] font-bold text-rose-600">{finalizationError}</p>
+                      <div className="mt-2 flex items-center justify-center gap-2">
+                        <button type="button" onClick={() => void retryFinalize()} className="h-8 rounded-full bg-[#111936] px-4 text-[11px] font-bold text-white">
+                          Retry
+                        </button>
+                        <button type="button" onClick={resumeSession} className="h-8 rounded-full border border-slate-200 bg-white px-4 text-[11px] font-bold text-slate-700">
+                          Return to Session
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
               <GCCInsightsSheet
                 count={gccSession.suggestionsCount}
                 suggestions={[...gccSession.suggestions]}

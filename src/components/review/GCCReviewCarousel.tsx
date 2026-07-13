@@ -7,9 +7,11 @@ import GCCPatientSummaryCard from "@/components/review/GCCPatientSummaryCard";
 import GCCReviewActions from "@/components/review/GCCReviewActions";
 import GCCReviewShell from "@/components/review/GCCReviewShell";
 import GCCSoapReviewCard from "@/components/review/GCCSoapReviewCard";
+import { fetchGCCSoapNote, getSoapStorageKey, type GCCSoapNote } from "@/lib/gcc/session-api";
 
 type GCCReviewCarouselProps = {
   initialStep: 0 | 1 | 2;
+  sessionId?: string | null;
 };
 
 type ReviewSlideIndex = 0 | 1 | 2;
@@ -37,7 +39,7 @@ const slideMeta = [
 const interactiveSelector = 'input, textarea, button, a, select, [contenteditable="true"]';
 const dragThresholdRatio = 0.22;
 
-export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProps) {
+export default function GCCReviewCarousel({ initialStep, sessionId = null }: GCCReviewCarouselProps) {
   const router = useRouter();
   const viewportRef = useRef<HTMLDivElement>(null);
   const firstCardRef = useRef<HTMLDivElement>(null);
@@ -56,17 +58,20 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
   const [reducedMotion, setReducedMotion] = useState(false);
   const [toast, setToast] = useState("");
   const [patientCompleted, setPatientCompleted] = useState(false);
+  const [soapNote, setSoapNote] = useState<GCCSoapNote | null>(null);
+  const [isSoapLoading, setIsSoapLoading] = useState(false);
+  const [soapError, setSoapError] = useState<string | null>(null);
 
   const gap = viewportWidth < 768 ? 18 : 72;
   const stepDistance = cardWidth + gap;
   const currentMeta = slideMeta[activeIndex];
   const cards = useMemo(
     () => [
-      <GCCSoapReviewCard key="soap" />,
+      <GCCSoapReviewCard key="soap" soapNote={soapNote} isLoading={isSoapLoading} errorMessage={soapError} sessionId={sessionId} />,
       <GCCBillingReviewCard key="billing" />,
       <GCCPatientSummaryCard key="summary" completed={patientCompleted} />,
     ],
-    [patientCompleted],
+    [isSoapLoading, patientCompleted, sessionId, soapError, soapNote],
   );
 
   useEffect(() => {
@@ -99,6 +104,54 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
     const timeoutId = window.setTimeout(() => setToast(""), 2400);
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
+
+  useEffect(() => {
+    if (!sessionId) {
+      setSoapNote(null);
+      setSoapError(null);
+      setIsSoapLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+    const loadSoapNote = async () => {
+      setIsSoapLoading(true);
+      setSoapError(null);
+      let hasSoap = false;
+
+      try {
+        const cached = localStorage.getItem(getSoapStorageKey(sessionId));
+        if (cached) {
+          const parsed = JSON.parse(cached) as GCCSoapNote;
+          hasSoap = true;
+          if (isMounted) setSoapNote(parsed);
+        }
+      } catch {
+        // Ignore malformed local cache and continue to backend fetch.
+      }
+
+      try {
+        const remoteSoap = await fetchGCCSoapNote(sessionId);
+        if (remoteSoap && isMounted) {
+          hasSoap = true;
+          setSoapNote(remoteSoap);
+          localStorage.setItem(getSoapStorageKey(sessionId), JSON.stringify(remoteSoap));
+        }
+      } catch {
+        // Local cache/fallback remains visible when backend is unavailable.
+      } finally {
+        if (isMounted) {
+          setIsSoapLoading(false);
+          setSoapError(hasSoap ? null : "Generated SOAP Notes are not available for this session yet.");
+        }
+      }
+    };
+
+    void loadSoapNote();
+    return () => {
+      isMounted = false;
+    };
+  }, [sessionId]);
 
   useEffect(
     () => () => {

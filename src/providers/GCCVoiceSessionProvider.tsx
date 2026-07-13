@@ -2,6 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { buildFinalTranscript, removeVoiceCommands } from "@/lib/gcc/transcript-utils";
+import { finalizeGCCSession, saveSoapLocally } from "@/lib/gcc/session-api";
 
 export type SessionStatus = "idle" | "command-listening" | "starting" | "recording" | "paused" | "stopping" | "stopped" | "error";
 export type PermissionState = "unknown" | "prompt" | "granted" | "denied";
@@ -51,13 +53,16 @@ type GCCVoiceSessionContextValue = {
   startSession: (options?: StartSessionOptions) => Promise<string | null>;
   pauseSession: () => void;
   resumeSession: () => void;
-  stopSession: () => void;
+  stopSession: () => Promise<void>;
   restartRecognition: () => void;
   clearSession: () => void;
   formatElapsedTime: (value?: number) => string;
   handleVoiceCommand: (text: string) => boolean;
   navigateToSessionFromVoice: () => Promise<void>;
-  finalizeAndNavigateToSoap: () => void;
+  finalizeAndNavigateToSoap: () => Promise<void>;
+  finalizationMessage: string | null;
+  finalizationError: string | null;
+  retryFinalize: () => Promise<void>;
 };
 
 const storageKey = "medexa_gcc_voice_session";
@@ -162,12 +167,15 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   const pausedAtRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
   const finalizingRef = useRef(false);
+  const stoppedRef = useRef(false);
   const startNavigationInProgressRef = useRef(false);
   const mountedRef = useRef(false);
   const permissionStatusRef = useRef<PermissionState>("unknown");
   const networkRetryRef = useRef(0);
   const lastFinalTextRef = useRef("");
+  const latestHeardTextRef = useRef("");
   const transcriptSegmentsRef = useRef<TranscriptSegment[]>([]);
+  const recognitionEndWaitersRef = useRef<Array<() => void>>([]);
   const processRecognitionResultRef = useRef<(event: SpeechRecognitionEvent) => void>(() => undefined);
   const restartRecognitionRef = useRef<() => void>(() => undefined);
 
@@ -183,6 +191,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   const [startedAt, setStartedAt] = useState<number | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [lastCommand, setLastCommand] = useState<string | null>(null);
+  const [finalizationMessage, setFinalizationMessage] = useState<string | null>(null);
+  const [finalizationError, setFinalizationError] = useState<string | null>(null);
 
   const setSafeStatus = useCallback((nextStatus: SessionStatus) => {
     statusRef.current = nextStatus;
@@ -201,6 +211,21 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       ...override,
     };
     window.sessionStorage.setItem(storageKey, JSON.stringify(payload));
+  }, []);
+
+  const saveRecoveryDraft = useCallback((payload: { sessionId: string; transcript: string; elapsedMs: number; status: "finalizing" | "failed" }) => {
+    if (typeof window === "undefined") return;
+    window.sessionStorage.setItem(
+      `medexa_gcc_session_${payload.sessionId}`,
+      JSON.stringify({
+        sessionId: payload.sessionId,
+        transcript: payload.transcript,
+        transcriptSegments: transcriptSegmentsRef.current,
+        elapsedMs: payload.elapsedMs,
+        status: payload.status,
+        savedAt: new Date().toISOString(),
+      }),
+    );
   }, []);
 
   const clearRestartTimeout = useCallback(() => {
@@ -240,6 +265,23 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       // Some browser implementations throw if recognition is not running.
     }
   }, [clearRestartTimeout]);
+
+  const waitForRecognitionEnd = useCallback(() => {
+    if (!recognitionRef.current || !isRecognitionActive) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      recognitionEndWaitersRef.current.push(finish);
+      window.setTimeout(finish, 1500);
+    });
+  }, [isRecognitionActive]);
 
   const startRecognition = useCallback((mode: RecognitionMode) => {
     const SpeechRecognition = getSpeechRecognitionConstructor();
@@ -284,6 +326,9 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       recognition.onend = () => {
         recognitionStartingRef.current = false;
         setIsRecognitionActive(false);
+        const waiters = recognitionEndWaitersRef.current;
+        recognitionEndWaitersRef.current = [];
+        waiters.forEach((resolve) => resolve());
         if (shouldRecognitionRunRef.current && !manualStopRef.current && permissionStatusRef.current !== "denied" && modeRef.current !== "off") {
           restartRecognitionRef.current();
         }
@@ -311,7 +356,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       setErrorMessage(error instanceof Error ? error.message : "Unable to start live voice recognition.");
       return false;
     }
-  }, [isRecognitionActive, setSafeStatus]);
+  }, [isRecognitionActive, safeStopRecognition, setSafeStatus]);
 
   const requestMicrophonePermission = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
@@ -381,27 +426,123 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     persistSession({ transcriptSegments: nextSegments, finalTranscript: finalTranscriptRef.current });
   }, [calculateElapsed, persistSession]);
 
-  const finalizeAndNavigateToSoap = useCallback(() => {
-    if (finalizingRef.current) return;
-    finalizingRef.current = true;
-    setSafeStatus("stopping");
-    const frozenElapsed = calculateElapsed();
-    accumulatedMsRef.current = frozenElapsed;
-    sessionStartedAtRef.current = null;
-    setElapsedMs(frozenElapsed);
-    setStartedAt(null);
-    stopTimerInterval();
-    safeStopRecognition("stop");
-    modeRef.current = "off";
+  const flushRecognitionBeforeFinalize = useCallback(async () => {
+    manualStopRef.current = true;
+    shouldRecognitionRunRef.current = false;
+    clearRestartTimeout();
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      // Recognition may already be stopped; continue with refs.
+    }
+
+    await waitForRecognitionEnd();
+
+    const interim = removeVoiceCommands(interimTranscriptRef.current);
+    const existingTranscript = buildFinalTranscript({
+      finalTranscript: finalTranscriptRef.current,
+      transcriptSegments: transcriptSegmentsRef.current,
+      interimTranscript: "",
+      latestHeardText: latestHeardTextRef.current,
+    });
+
+    if (interim && !existingTranscript.toLowerCase().includes(interim.toLowerCase())) {
+      appendFinalTranscript(interim);
+    }
+
     interimTranscriptRef.current = "";
     setInterimTranscript("");
-    setSafeStatus("stopped");
-    persistSession({ status: "stopped", elapsedMs: frozenElapsed });
+  }, [appendFinalTranscript, clearRestartTimeout, waitForRecognitionEnd]);
+
+  const finalizeAndNavigateToSoap = useCallback(async () => {
+    if (finalizingRef.current) return;
+    if (stoppedRef.current) return;
+    finalizingRef.current = true;
+    stoppedRef.current = true;
+    setSafeStatus("stopping");
+    setFinalizationMessage("Finalizing transcript and generating SOAP Notes...");
+    setFinalizationError(null);
     const id = sessionIdRef.current ?? generateSessionId();
     sessionIdRef.current = id;
     setSessionId(id);
-    router.push(`/soap-notes?sessionId=${encodeURIComponent(id)}`);
-  }, [calculateElapsed, persistSession, router, safeStopRecognition, setSafeStatus, stopTimerInterval]);
+
+    try {
+      await flushRecognitionBeforeFinalize();
+      const frozenElapsed = calculateElapsed();
+      accumulatedMsRef.current = frozenElapsed;
+      sessionStartedAtRef.current = null;
+      setElapsedMs(frozenElapsed);
+      setStartedAt(null);
+      stopTimerInterval();
+      modeRef.current = "off";
+      const transcript = buildFinalTranscript({
+        finalTranscript: finalTranscriptRef.current,
+        transcriptSegments: transcriptSegmentsRef.current,
+        interimTranscript: interimTranscriptRef.current,
+        latestHeardText: latestHeardTextRef.current,
+      });
+
+      if (!transcript) {
+        throw new Error("No clinical transcript was captured. Continue the session or enter a note before generating SOAP.");
+      }
+
+      saveRecoveryDraft({ sessionId: id, transcript, elapsedMs: frozenElapsed, status: "finalizing" });
+      const response = await finalizeGCCSession({
+        sessionId: id,
+        transcript,
+        transcriptSegments: transcriptSegmentsRef.current,
+        elapsedMs: frozenElapsed,
+      });
+
+      if (response.saved_to_store !== true || !response.soap_note) {
+        throw new Error("SOAP generation could not be completed. Your transcript has been saved.");
+      }
+
+      saveSoapLocally({
+        sessionId: id,
+        soapNote: response.soap_note,
+        elapsedMs: frozenElapsed,
+        transcript,
+        llmUsed: response.llm_used,
+        fallbackReason: response.llm_fallback_reason,
+      });
+      setSafeStatus("stopped");
+      persistSession({ status: "stopped", elapsedMs: frozenElapsed });
+      setFinalizationMessage(null);
+      router.push(`/soap-notes?sessionId=${encodeURIComponent(id)}`);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "SOAP generation could not be completed. Your transcript has been saved.";
+      const failedElapsed = calculateElapsed();
+      const transcript = buildFinalTranscript({
+        finalTranscript: finalTranscriptRef.current,
+        transcriptSegments: transcriptSegmentsRef.current,
+        interimTranscript: interimTranscriptRef.current,
+        latestHeardText: latestHeardTextRef.current,
+      });
+      saveRecoveryDraft({ sessionId: id, transcript, elapsedMs: failedElapsed, status: "failed" });
+      accumulatedMsRef.current = failedElapsed;
+      sessionStartedAtRef.current = null;
+      setElapsedMs(failedElapsed);
+      stopTimerInterval();
+      setSafeStatus("stopped");
+      setFinalizationMessage(null);
+      setFinalizationError(message);
+      persistSession({ status: "stopped", elapsedMs: failedElapsed });
+      finalizingRef.current = false;
+      stoppedRef.current = false;
+    }
+  }, [
+    calculateElapsed,
+    flushRecognitionBeforeFinalize,
+    persistSession,
+    router,
+    saveRecoveryDraft,
+    setSafeStatus,
+    stopTimerInterval,
+  ]);
 
   const pauseSession = useCallback(() => {
     if (statusRef.current !== "recording") return;
@@ -445,7 +586,10 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     sessionStartedAtRef.current = null;
     pausedAtRef.current = null;
     finalizingRef.current = false;
+    stoppedRef.current = false;
     startNavigationInProgressRef.current = false;
+    setFinalizationMessage(null);
+    setFinalizationError(null);
     setFinalTranscript("");
     setInterimTranscript("");
     setTranscriptSegments([]);
@@ -467,6 +611,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
 
     const id = options?.sessionId ?? generateSessionId();
     finalizingRef.current = false;
+    stoppedRef.current = false;
     sessionIdRef.current = id;
     setSessionId(id);
     if (!options?.preserveTranscript) {
@@ -501,8 +646,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     router.push(`/session?sessionId=${encodeURIComponent(id)}&autoStart=1&source=voice`);
   }, [router, startSession]);
 
-  const stopSession = useCallback(() => {
-    finalizeAndNavigateToSoap();
+  const stopSession = useCallback(async () => {
+    await finalizeAndNavigateToSoap();
   }, [finalizeAndNavigateToSoap]);
 
   const handleVoiceCommand = useCallback((rawText: string) => {
@@ -529,7 +674,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     if (modeRef.current === "session-transcription" || modeRef.current === "paused-command-only") {
       if (matchesAny(normalized, commandPatterns.stop) && (hasMedexaPrefix(normalized) || /^(stop|end)\s+(recording|session)$/.test(normalized))) {
         markCommand("stop-recording");
-        finalizeAndNavigateToSoap();
+        void finalizeAndNavigateToSoap();
         return true;
       }
 
@@ -556,6 +701,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       const text = alternative.transcript.trim();
       if (!text) continue;
 
+      latestHeardTextRef.current = text;
       setLatestHeardText(text);
       const isCommand = handleVoiceCommand(text);
       if (isCommand || isLikelyCommand(normalizeCommandText(text))) {
@@ -566,7 +712,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
         continue;
       }
 
-      if (modeRef.current !== "session-transcription" || statusRef.current !== "recording") {
+      if (modeRef.current !== "session-transcription" || (statusRef.current !== "recording" && statusRef.current !== "stopping")) {
         continue;
       }
 
@@ -705,6 +851,9 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     recognition.onend = () => {
       recognitionStartingRef.current = false;
       setIsRecognitionActive(false);
+      const waiters = recognitionEndWaitersRef.current;
+      recognitionEndWaitersRef.current = [];
+      waiters.forEach((resolve) => resolve());
       if (shouldRecognitionRunRef.current && !manualStopRef.current && permissionStatusRef.current !== "denied" && modeRef.current !== "off") {
         restartRecognition();
       }
@@ -720,6 +869,12 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
 
     startNavigationInProgressRef.current = false;
   }, [pathname, safeStopRecognition]);
+
+  const retryFinalize = useCallback(async () => {
+    finalizingRef.current = false;
+    stoppedRef.current = false;
+    await finalizeAndNavigateToSoap();
+  }, [finalizeAndNavigateToSoap]);
 
   const value = useMemo<GCCVoiceSessionContextValue>(
     () => ({
@@ -748,6 +903,9 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       handleVoiceCommand,
       navigateToSessionFromVoice,
       finalizeAndNavigateToSoap,
+      finalizationMessage,
+      finalizationError,
+      retryFinalize,
     }),
     [
       clearSession,
@@ -756,6 +914,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       errorMessage,
       finalTranscript,
       finalizeAndNavigateToSoap,
+      finalizationError,
+      finalizationMessage,
       handleVoiceCommand,
       interimTranscript,
       isRecognitionActive,
@@ -765,6 +925,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       pauseSession,
       permissionStatus,
       restartRecognition,
+      retryFinalize,
       resumeSession,
       sessionId,
       startAmbientCommandListening,
