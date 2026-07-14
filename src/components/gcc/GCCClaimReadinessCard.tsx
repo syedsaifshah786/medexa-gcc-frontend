@@ -1,31 +1,63 @@
-"use client";
+import { AlertTriangle, CheckCircle2, FileSearch } from "lucide-react";
+import type { GCCClaimReadiness } from "@/types/gcc-live-insights";
 
-import SlideAction from "@/components/gcc/SlideAction";
+function readinessCopy(readiness: GCCClaimReadiness | null) {
+  if (!readiness) {
+    return "Claim quality is still being evaluated.";
+  }
 
-export default function GCCClaimReadinessCard({ focused = false, onFocus }: { focused?: boolean; onFocus?: () => void }) {
+  if (readiness.summary.trim()) {
+    return readiness.summary;
+  }
+
+  if (readiness.blockingIssues > 0) {
+    return `${readiness.blockingIssues} ${readiness.blockingIssues === 1 ? "issue" : "issues"} may impact claim approval.`;
+  }
+
+  if (readiness.warnings > 0) {
+    return `${readiness.warnings} ${readiness.warnings === 1 ? "item requires" : "items require"} clinician review.`;
+  }
+
+  return "No active documentation issues detected yet.";
+}
+
+export default function GCCClaimReadinessCard({ readiness, isAnalyzing = false }: { readiness: GCCClaimReadiness | null; isAnalyzing?: boolean }) {
+  const hasBlockingIssues = Boolean(readiness?.blockingIssues);
+  const hasWarnings = Boolean(readiness?.warnings);
+  const Icon = hasBlockingIssues || hasWarnings ? AlertTriangle : readiness ? CheckCircle2 : FileSearch;
+
   return (
-    <article
-      onClick={onFocus}
-      className={`relative cursor-pointer overflow-hidden rounded-[15px] bg-gradient-to-br from-[#191d3b] to-[#292452] p-3 text-white shadow-[0_8px_22px_rgba(23,27,53,0.18)] transition ${focused ? "ring-2 ring-emerald-300/40" : ""}`}
+    <aside
+      aria-label="Claim readiness"
+      className="relative overflow-hidden rounded-b-[18px] border-t border-indigo-950/20 bg-gradient-to-br from-[#171d3b] via-[#22234b] to-[#30275c] px-4 py-3.5 text-white shadow-[0_-8px_24px_rgba(15,23,42,0.08)]"
     >
-      <div className="absolute -right-8 -top-10 size-28 rounded-full bg-indigo-500/25 blur-2xl" />
-      <div className="relative flex items-start gap-2.5">
-        <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-amber-400/15 text-amber-300">
-          <svg viewBox="0 0 24 24" className="size-3.5" aria-hidden="true"><path d="M12 4 21 20H3Z" fill="none" stroke="currentColor" strokeLinejoin="round" strokeWidth="1.8" /><path d="M12 9v5M12 17h.01" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" /></svg>
+      <div className="pointer-events-none absolute -right-8 -top-12 size-28 rounded-full bg-indigo-400/20 blur-2xl" aria-hidden="true" />
+      <div className="relative flex items-start gap-3">
+        <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${hasBlockingIssues ? "bg-rose-400/15 text-rose-200" : hasWarnings ? "bg-amber-400/15 text-amber-200" : "bg-emerald-400/15 text-emerald-200"}`}>
+          <Icon className="size-[18px]" aria-hidden="true" />
         </span>
         <div className="min-w-0 flex-1">
-          <span className="inline-flex rounded-full bg-indigo-400/10 px-1.5 py-0.5 text-[7px] font-bold uppercase tracking-[0.13em] text-indigo-200">Claim Readiness</span>
-          <h3 className="mt-1 text-[10px] font-bold leading-[1.4]">2 issues found that may impact claim approval.</h3>
-          <p className="mt-0.5 text-[8px] leading-[1.45] text-slate-400">Review the documentation prompts before closing this GCC Session.</p>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-indigo-100">Claim Readiness</h3>
+            {isAnalyzing && <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-indigo-200"><i className="size-1.5 animate-pulse rounded-full bg-indigo-300" />Analyzing</span>}
+          </div>
+          <p className="mt-1 text-[13px] font-semibold leading-5 text-white">{readinessCopy(readiness)}</p>
+          {readiness && (readiness.blockingIssues > 0 || readiness.warnings > 0) && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {readiness.blockingIssues > 0 && (
+                <span className="rounded-full bg-rose-400/15 px-2 py-1 text-[10px] font-bold text-rose-100">
+                  {readiness.blockingIssues} blocking
+                </span>
+              )}
+              {readiness.warnings > 0 && (
+                <span className="rounded-full bg-amber-400/15 px-2 py-1 text-[10px] font-bold text-amber-100">
+                  {readiness.warnings} {readiness.warnings === 1 ? "warning" : "warnings"}
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </div>
-      <SlideAction
-        label="Slide to Improve"
-        completedLabel="Improved"
-        variant="dark"
-        onComplete={() => undefined}
-        className="mt-2 w-full"
-      />
-    </article>
+    </aside>
   );
 }

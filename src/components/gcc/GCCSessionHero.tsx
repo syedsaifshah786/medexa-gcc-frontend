@@ -1,111 +1,150 @@
-import GCCTranscript from "@/components/gcc/GCCTranscript";
-import type { TranscriptLine } from "@/lib/mock/gcc-session";
-import type { SessionStatus, TranscriptSegment } from "@/providers/GCCVoiceSessionProvider";
+import { Mic, Pause, Play, Square } from "lucide-react";
+import type { SessionStatus } from "@/providers/GCCVoiceSessionProvider";
 
-const bars = [7, 13, 10, 21, 14, 27, 12, 18, 31, 21, 10, 25, 17, 33, 22, 14, 28, 18, 10, 23, 15, 30, 20, 11, 25, 17, 8];
+const waveformBars = [
+  14, 20, 12, 28, 18, 34, 16, 25, 38, 22, 15, 32, 19, 40, 26, 17, 35, 21, 13, 29, 18, 37, 24, 14, 31, 20, 12, 27, 17,
+  33, 22, 15, 30, 19, 13,
+];
+
+type GCCSessionHeroProps = {
+  timer: string;
+  status: SessionStatus;
+  onStartRecording: () => void;
+  onPauseRecording: () => void;
+  onResumeRecording: () => void;
+  onStopRecording: () => void | Promise<void>;
+};
+
+function getSessionMessage(status: SessionStatus) {
+  switch (status) {
+    case "recording":
+      return "Listening to the session...";
+    case "paused":
+      return "Session paused \u2014 say \u201cResume session\u201d or press Resume";
+    case "stopping":
+      return "Generating the clinical review...";
+    case "starting":
+      return "Starting live listening...";
+    case "stopped":
+      return "Session stopped";
+    case "error":
+      return "Recording is unavailable. Check microphone access and try again.";
+    default:
+      return "Press the microphone to start the session";
+  }
+}
 
 export default function GCCSessionHero({
   timer,
-  transcript,
-  segments,
-  interimTranscript,
   status,
   onStartRecording,
   onPauseRecording,
   onResumeRecording,
   onStopRecording,
-  formatTimestamp,
-}: {
-  timer: string;
-  transcript?: TranscriptLine[];
-  segments?: TranscriptSegment[];
-  interimTranscript?: string;
-  status: SessionStatus;
-  onStartRecording: () => void;
-  onPauseRecording: () => void;
-  onResumeRecording: () => void;
-  onStopRecording: () => void;
-  formatTimestamp: (timestampMs: number) => string;
-}) {
-  const paused = status === "paused";
-  const stopped = status === "stopped" || status === "stopping";
-  const recording = status === "recording";
+}: GCCSessionHeroProps) {
+  const isRecording = status === "recording";
+  const isPaused = status === "paused";
+  const isStarting = status === "starting";
+  const isFinalizing = status === "stopping";
+  const canControlRecording = isRecording || isPaused;
+  const primaryLabel = isPaused ? "Resume session" : isRecording ? "Pause session" : "Start session";
+
+  const handlePrimaryAction = () => {
+    if (isPaused) {
+      onResumeRecording();
+      return;
+    }
+
+    if (isRecording) {
+      onPauseRecording();
+      return;
+    }
+
+    onStartRecording();
+  };
 
   return (
-    <section className="relative w-full px-1 pb-0.5 pt-1">
-      <div className="mx-auto flex w-full max-w-[520px] flex-col items-center">
-        <div className="relative h-32 w-[280px] max-w-full">
+    <section
+      aria-label="Recording controls"
+      className="relative mx-auto w-full max-w-[760px] overflow-hidden rounded-[24px] border border-white/80 bg-[radial-gradient(circle_at_50%_18%,rgba(129,140,248,0.24),transparent_50%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(238,242,255,0.9))] px-4 py-[18px] shadow-[0_18px_50px_rgba(79,70,229,0.12)] sm:px-6"
+    >
+      <div className="pointer-events-none absolute -left-20 top-1/2 size-44 -translate-y-1/2 rounded-full bg-sky-300/15 blur-3xl" />
+      <div className="pointer-events-none absolute -right-20 top-1/2 size-44 -translate-y-1/2 rounded-full bg-violet-400/15 blur-3xl" />
+
+      <div className="relative flex flex-col items-center">
+        <div className="flex items-center justify-center gap-5 sm:gap-8">
           <button
             type="button"
-            onClick={() => {
-              if (paused) {
-                onResumeRecording();
-              } else if (recording) {
-                onPauseRecording();
-              } else {
-                onStartRecording();
-              }
-            }}
-            aria-label={paused ? "Resume recording" : "Pause recording"}
-            className="absolute left-6 top-1/2 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_5px_14px_rgba(79,70,229,0.13)] transition hover:scale-105"
+            onClick={isPaused ? onResumeRecording : onPauseRecording}
+            disabled={!canControlRecording || isFinalizing}
+            aria-label={isPaused ? "Resume session" : "Pause session"}
+            title={isPaused ? "Resume session" : "Pause session"}
+            className="grid size-[46px] shrink-0 place-items-center rounded-full border border-indigo-200 bg-white/90 text-indigo-700 shadow-[0_8px_22px_rgba(79,70,229,0.13)] transition duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200/70"
           >
-            {paused ? (
-              <svg viewBox="0 0 24 24" className="size-4" aria-hidden="true"><path d="m9 7 8 5-8 5Z" fill="currentColor" /></svg>
-            ) : (
-              <span className="flex gap-1"><i className="h-3 w-0.5 rounded bg-current" /><i className="h-3 w-0.5 rounded bg-current" /></span>
-            )}
+            {isPaused ? <Play aria-hidden="true" size={20} fill="currentColor" /> : <Pause aria-hidden="true" size={20} fill="currentColor" />}
           </button>
 
-          <div className="absolute left-1/2 top-1/2 grid size-28 -translate-x-1/2 -translate-y-1/2 place-items-center">
-            <span className="absolute inset-0 rounded-full border border-indigo-200/60 animate-[ping_2.6s_ease-out_infinite]" />
-            <span className="absolute inset-3 rounded-full border border-dashed border-indigo-200/90 bg-indigo-50/45" />
-            <span className="absolute inset-6 rounded-full bg-indigo-100/55 blur-[1px]" />
-            <div className={`relative grid size-14 place-items-center rounded-full text-white shadow-[0_10px_25px_rgba(78,70,229,0.34)] ${stopped ? "bg-slate-400" : "bg-gradient-to-br from-[#7467ff] to-[#4539dc]"}`}>
-              <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5">
-                <rect x="8" y="3.5" width="8" height="12" rx="4" fill="none" stroke="currentColor" strokeWidth="1.8" />
-                <path d="M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v3M8.5 21h7" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="1.8" />
-              </svg>
-            </div>
+          <div className="relative grid size-[72px] place-items-center max-sm:size-16">
+            {isRecording && (
+              <>
+                <span className="pointer-events-none absolute -inset-3 rounded-full border border-indigo-300/45 animate-[ping_2.4s_ease-out_infinite] motion-reduce:animate-none" />
+                <span className="pointer-events-none absolute -inset-1.5 rounded-full bg-indigo-400/15" />
+              </>
+            )}
+            <button
+              type="button"
+              onClick={handlePrimaryAction}
+              disabled={isStarting || isFinalizing}
+              aria-label={primaryLabel}
+              title={primaryLabel}
+              className="relative grid size-[72px] place-items-center rounded-full bg-gradient-to-br from-[#7768ff] via-[#6254ee] to-[#4338ca] text-white shadow-[0_14px_34px_rgba(79,70,229,0.4)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(79,70,229,0.46)] active:translate-y-0 active:scale-95 disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0 max-sm:size-16 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/75 focus-visible:ring-offset-4"
+            >
+              <Mic aria-hidden="true" size={30} strokeWidth={2.1} className="max-sm:size-7" />
+            </button>
           </div>
 
           <button
             type="button"
             onClick={onStopRecording}
-            aria-label="Stop recording"
-            className="absolute right-6 top-1/2 z-10 grid size-8 -translate-y-1/2 place-items-center rounded-full border border-indigo-100 bg-white text-indigo-600 shadow-[0_5px_14px_rgba(79,70,229,0.13)] transition hover:scale-105"
+            disabled={!canControlRecording || isFinalizing}
+            aria-label="Stop and finalize session"
+            title="Stop and finalize session"
+            className="grid size-[46px] shrink-0 place-items-center rounded-full border border-rose-200 bg-rose-50/95 text-rose-600 shadow-[0_8px_22px_rgba(225,29,72,0.1)] transition duration-200 hover:-translate-y-0.5 hover:border-rose-300 hover:bg-rose-100 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-200/75"
           >
-            <span className="size-2.5 rounded-[3px] bg-current" />
+            <Square aria-hidden="true" size={20} fill="currentColor" strokeWidth={1.8} />
           </button>
         </div>
 
-        <p className="text-[10px] font-semibold tracking-wide text-slate-400">
-          {stopped ? (
-            "Session Completed"
-          ) : paused ? (
-            <>Session Paused &mdash; Say <span className="text-indigo-600">Resume Recording</span></>
-          ) : (
-            <>Say <span className="text-indigo-600">Stop Recording</span>..</>
-          )}
+        <p aria-live="polite" className="mt-3 min-h-5 text-center text-[13px] font-semibold leading-5 text-slate-600">
+          {getSessionMessage(status)}
         </p>
-        <div className="relative mt-1.5 h-10 w-full max-w-[380px]">
-          <div className="absolute left-1/2 top-1/2 flex h-9 w-[calc(100%-96px)] max-w-[280px] -translate-x-1/2 -translate-y-1/2 items-center justify-between">
-            {bars.map((height, index) => (
+
+        <div className="mt-2 flex w-full max-w-[660px] flex-col items-center gap-2 sm:flex-row sm:gap-4">
+          <div
+            aria-hidden="true"
+            className={`flex h-11 min-w-0 flex-1 items-center justify-between gap-1 rounded-full border px-3 sm:px-4 ${
+              isRecording ? "border-indigo-100 bg-white/70" : "border-slate-200/70 bg-white/45"
+            }`}
+          >
+            {waveformBars.map((height, index) => (
               <i
                 key={`${height}-${index}`}
-                className={`w-0.5 rounded-full bg-gradient-to-t from-indigo-500 to-sky-400 ${recording ? "gcc-wave-bar" : "opacity-35"}`}
-                style={{ height, animationDelay: `${index * 45}ms` }}
+                className={`w-0.5 shrink-0 rounded-full bg-gradient-to-t from-indigo-600 to-sky-400 transition-opacity duration-300 sm:w-[3px] ${
+                  isRecording ? "gcc-wave-bar opacity-100" : isPaused ? "opacity-35" : "opacity-20"
+                }`}
+                style={{ height, animationDelay: `${index * 38}ms` }}
               />
             ))}
           </div>
-          <span className="absolute right-0 top-1/2 inline-flex -translate-y-1/2 items-center gap-1 font-mono text-[10px] font-bold text-slate-600">
-            <svg viewBox="0 0 24 24" className="size-3 text-indigo-500" aria-hidden="true">
-              <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M12 7.5V12l3 2" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-            </svg>
+
+          <time
+            aria-live="off"
+            className="inline-flex h-9 min-w-[84px] shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white/80 px-3 font-mono text-[13px] font-bold tabular-nums text-slate-700 shadow-sm"
+          >
+            <span className="sr-only">Elapsed session time </span>
             {timer}
-          </span>
+          </time>
         </div>
-        <GCCTranscript lines={transcript} segments={segments} interimTranscript={interimTranscript} formatTimestamp={formatTimestamp} />
       </div>
     </section>
   );

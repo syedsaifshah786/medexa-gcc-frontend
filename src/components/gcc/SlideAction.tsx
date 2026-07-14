@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 
 type SlideActionProps = {
   label: string;
@@ -8,6 +8,8 @@ type SlideActionProps = {
   onComplete: () => void;
   variant?: "light" | "dark";
   className?: string;
+  completed?: boolean;
+  disabled?: boolean;
 };
 
 const threshold = 0.82;
@@ -18,6 +20,8 @@ export default function SlideAction({
   onComplete,
   variant = "light",
   className = "",
+  completed: controlledCompleted,
+  disabled = false,
 }: SlideActionProps) {
   const trackRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
@@ -27,8 +31,10 @@ export default function SlideAction({
   const previousUserSelectRef = useRef("");
   const [isDragging, setIsDragging] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [completed, setCompleted] = useState(false);
+  const [internalCompleted, setInternalCompleted] = useState(false);
   const [travelDistance, setTravelDistance] = useState(0);
+  const completed = controlledCompleted ?? internalCompleted;
+  const displayedProgress = completed ? 1 : progress;
 
   const measureTravelDistance = () => {
     if (!trackRef.current || !knobRef.current) return 0;
@@ -45,8 +51,17 @@ export default function SlideAction({
     document.body.style.userSelect = previousUserSelectRef.current;
   };
 
+  const finish = () => {
+    if (completed || disabled) return;
+    updateProgress(1);
+    if (controlledCompleted === undefined) {
+      setInternalCompleted(true);
+    }
+    onComplete();
+  };
+
   const handlePointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (completed || (event.pointerType === "mouse" && event.button !== 0)) return;
+    if (completed || disabled || (event.pointerType === "mouse" && event.button !== 0)) return;
 
     event.preventDefault();
     event.stopPropagation();
@@ -79,8 +94,7 @@ export default function SlideAction({
 
     if (progressRef.current >= threshold) {
       updateProgress(1);
-      setCompleted(true);
-      onComplete();
+      finish();
     } else {
       updateProgress(0);
     }
@@ -101,6 +115,39 @@ export default function SlideAction({
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (completed || disabled) return;
+
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      finish();
+      return;
+    }
+
+    if (event.key === "Home") {
+      event.preventDefault();
+      updateProgress(0);
+      return;
+    }
+
+    if (event.key === "End") {
+      event.preventDefault();
+      finish();
+      return;
+    }
+
+    if (["ArrowRight", "ArrowUp", "ArrowLeft", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      const direction = event.key === "ArrowRight" || event.key === "ArrowUp" ? 1 : -1;
+      const nextProgress = progressRef.current + direction * 0.1;
+      if (nextProgress >= threshold) {
+        finish();
+      } else {
+        updateProgress(nextProgress);
+      }
     }
   };
 
@@ -129,30 +176,32 @@ export default function SlideAction({
     <div
       ref={trackRef}
       role="slider"
+      tabIndex={completed || disabled ? -1 : 0}
       aria-label={`${label}. Drag to confirm.`}
       aria-valuemin={0}
       aria-valuemax={100}
-      aria-valuenow={Math.round(progress * 100)}
-      aria-valuetext={completed ? completedLabel : `${Math.round(progress * 100)} percent`}
-      aria-disabled={completed}
+      aria-valuenow={Math.round(displayedProgress * 100)}
+      aria-valuetext={completed ? completedLabel : `${Math.round(displayedProgress * 100)} percent`}
+      aria-disabled={completed || disabled}
       data-slide-action
+      onKeyDown={handleKeyDown}
       onClick={(event) => event.stopPropagation()}
-      className={`relative h-8 select-none overflow-hidden rounded-full border shadow-[0_4px_12px_rgba(55,65,130,0.09)] ${
+      className={`relative h-9 select-none overflow-hidden rounded-full border shadow-[0_4px_12px_rgba(55,65,130,0.09)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-2 ${
         isDark
           ? "border-white/10 bg-white/10 text-white"
           : "border-slate-200/80 bg-slate-100 text-slate-500"
-      } ${completed ? "border-emerald-400/30 bg-emerald-500 text-white" : ""} ${className}`}
+      } ${completed ? "border-emerald-400/30 bg-emerald-500 text-white" : ""} ${disabled ? "cursor-not-allowed opacity-55" : ""} ${className}`}
       style={{ touchAction: "none" }}
     >
       {!completed && (
         <span
           aria-hidden="true"
           className={`absolute inset-y-0 left-0 transition-opacity ${isDark ? "bg-indigo-500/25" : "bg-indigo-100"}`}
-          style={{ width: `${progress * 100}%` }}
+          style={{ width: `${displayedProgress * 100}%` }}
         />
       )}
 
-      <span className="pointer-events-none absolute inset-0 grid place-items-center px-8 text-[8px] font-bold">
+      <span className="pointer-events-none absolute inset-0 grid place-items-center px-10 text-[11px] font-bold">
         {completed ? completedLabel : label}
       </span>
 
@@ -162,10 +211,10 @@ export default function SlideAction({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerCancel}
-        className={`absolute left-1 top-1 grid size-6 place-items-center rounded-full shadow-md ${
+        className={`absolute left-1 top-1 grid size-7 place-items-center rounded-full shadow-md ${
           completed ? "cursor-default bg-white text-emerald-600" : "cursor-grab bg-gradient-to-br from-indigo-500 to-violet-500 text-white active:cursor-grabbing"
-        } ${isDragging ? "" : "transition-transform duration-300 ease-out"}`}
-        style={{ transform: `translateX(${progress * Math.max(0, travelDistance)}px)`, touchAction: "none" }}
+        } ${disabled ? "cursor-not-allowed" : ""} ${isDragging ? "" : "transition-transform duration-300 ease-out"}`}
+        style={{ transform: `translateX(${displayedProgress * Math.max(0, travelDistance)}px)`, touchAction: "none" }}
       >
         {completed ? (
           <svg viewBox="0 0 24 24" className="size-3" aria-hidden="true">

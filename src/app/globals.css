@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  --header-height: 68px;
   --background: #f7f8fc;
   --foreground: #111827;
   --medexa-primary: #5146f5;
@@ -15,6 +16,13 @@
   --medexa-shadow-soft: 0 10px 26px rgba(28, 35, 90, 0.07);
   --medexa-radius: 16px;
   --medexa-radius-sm: 10px;
+}
+
+.gcc-session-workspace {
+  width: min(1240px, calc(100vw - 48px));
+  max-width: 1280px;
+  min-height: calc(100vh - var(--header-height));
+  margin-inline: auto;
 }
 
 @theme inline {
@@ -110,9 +118,46 @@ select:focus-visible,
   background: rgba(148, 163, 184, 0.42);
 }
 
+@keyframes gcc-suggestion-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.gcc-live-suggestion {
+  animation: gcc-suggestion-enter 260ms ease-out both;
+}
+
+.gcc-live-suggestion[data-suggestion-status="approved"] {
+  border-color: rgba(52, 211, 153, 0.48);
+  background: rgba(240, 253, 250, 0.98);
+}
+
+.gcc-live-suggestion[data-suggestion-status="ignored"],
+.gcc-live-suggestion[data-suggestion-status="resolved"] {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+@media (max-width: 767px) {
+  .gcc-session-workspace {
+    width: calc(100vw - 24px);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .gcc-wave-bar {
     animation: none;
+  }
+
+  .gcc-live-suggestion {
+    animation: none;
+    transition: none;
   }
 }
 
