@@ -1,19 +1,29 @@
+"use client";
+
+import { useGCCLocale } from "@/hooks/useGCCLocale";
+
 type GCCEditButtonProps = {
   isEditing: boolean;
   onClick: () => void;
   disabled?: boolean;
+  sectionTitle: string;
 };
 
-export default function GCCEditButton({ isEditing, onClick, disabled = false }: GCCEditButtonProps) {
+export default function GCCEditButton({ isEditing, onClick, disabled = false, sectionTitle }: GCCEditButtonProps) {
+  const { t } = useGCCLocale();
+  const actionLabel = isEditing ? t("review.save") : t("review.edit");
+
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      aria-label={t(isEditing ? "review.saveAria" : "review.editAria", { section: sectionTitle })}
+      title={actionLabel}
       className="inline-flex h-9 items-center gap-2 rounded-full border border-[#D8DDF2] bg-white px-4 text-[13px] font-semibold text-[#101BD8] shadow-[0_5px_14px_rgba(16,27,216,0.06)] transition hover:border-[#AEB7F7] hover:bg-[#F7F8FF] disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-[#D8DDF2] disabled:hover:bg-white"
     >
       {isEditing ? <CheckIcon className="size-4" /> : <EditIcon className="size-4" />}
-      {isEditing ? "Save" : "Edit"}
+      {actionLabel}
     </button>
   );
 }

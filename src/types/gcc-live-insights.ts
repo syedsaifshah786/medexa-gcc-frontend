@@ -1,3 +1,5 @@
+import type { GCCLocale } from "@/i18n/types";
+
 export type GCCLiveSuggestionCategory =
   | "protocol_question"
   | "clinical_prompt"
@@ -34,6 +36,8 @@ export type GCCClaimReadiness = {
 };
 
 export type GCCLiveInsightsResponse = {
+  language: GCCLocale;
+  locale: "en-US" | "ar-SA";
   sessionId: string;
   transcriptRevision: number;
   suggestions: GCCLiveSuggestion[];
@@ -55,6 +59,7 @@ export type GCCLiveTranscriptSegment = {
 };
 
 export type UseGCCLiveInsightsOptions = {
+  locale: GCCLocale;
   sessionId: string | null;
   isRecording: boolean;
   isPaused: boolean;

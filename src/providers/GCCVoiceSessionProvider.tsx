@@ -2,7 +2,14 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { buildFinalTranscript, removeVoiceCommands } from "@/lib/gcc/transcript-utils";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
+import {
+  buildFinalTranscript,
+  detectAmbientVoiceCommand,
+  detectSessionVoiceCommand,
+  normalizeVoiceCommandText,
+  removeVoiceCommands,
+} from "@/lib/gcc/transcript-utils";
 import { buildReviewBundleFromFinalizeResponse, finalizeGCCSession, saveReviewBundleLocally, saveSoapLocally } from "@/lib/gcc/session-api";
 
 export type SessionStatus = "idle" | "command-listening" | "starting" | "recording" | "paused" | "stopping" | "stopped" | "error";
@@ -18,6 +25,12 @@ export type TranscriptSegment = {
   confidence?: number;
 };
 
+export type GCCSessionPatient = {
+  name: string;
+  age: number | null;
+  gender: string;
+};
+
 type PersistedVoiceSession = {
   sessionId: string | null;
   status: SessionStatus;
@@ -26,12 +39,14 @@ type PersistedVoiceSession = {
   elapsedMs: number;
   source?: SessionSource;
   startedAt?: number | null;
+  patient?: GCCSessionPatient;
 };
 
 export type StartSessionOptions = {
   source?: SessionSource;
   sessionId?: string;
   preserveTranscript?: boolean;
+  patient?: GCCSessionPatient;
 };
 
 type GCCVoiceSessionContextValue = {
@@ -63,13 +78,14 @@ type GCCVoiceSessionContextValue = {
   finalizationMessage: string | null;
   finalizationError: string | null;
   retryFinalize: () => Promise<void>;
+  setSessionPatient: (patient: GCCSessionPatient) => void;
 };
 
 const storageKey = "medexa_gcc_voice_session";
-const unsupportedMessage = "Live voice recognition is not supported in this browser. Please use Chrome or Edge.";
 const commandCooldownMs = 2200;
 const reviewRoutes = new Set(["/soap-notes", "/billing-intelligence", "/patient-summary"]);
 const GCCVoiceSessionContext = createContext<GCCVoiceSessionContextValue | null>(null);
+const speechLanguages = { en: "en-US", ar: "ar-SA" } as const;
 
 const getSpeechRecognitionConstructor = () => {
   if (typeof window === "undefined") return null;
@@ -84,48 +100,6 @@ const generateSessionId = () => {
   return `gcc-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 };
 
-const normalizeCommandText = (text: string) =>
-  text
-    .toLowerCase()
-    .replace(/\b(madexa|med exa|med extra|mede?xa)\b/g, "medexa")
-    .replace(/\b(hi|hey|okay|ok)\s+madexa\b/g, "hey medexa")
-    .replace(/[^\w\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const hasMedexaPrefix = (text: string) => /\b(hey\s+)?medexa\b/.test(text);
-
-const commandPatterns = {
-  startSession: [
-    /\b(hey\s+)?medexa\s+start\s+(a\s+)?new\s+session\b/,
-    /\b(hey\s+)?medexa\s+start\s+session\b/,
-    /\b(hey\s+)?medexa\s+begin\s+session\b/,
-    /^start$/,
-  ],
-  startRecording: [
-    /\b(hey\s+)?medexa\s+start\s+recording\b/,
-    /\b(hey\s+)?medexa\s+start\s+session\b/,
-    /\b(hey\s+)?medexa\s+resume\s+(recording|session)?\b/,
-    /^start$/,
-    /\bresume\s+(recording|session)\b/,
-    /^resume$/,
-  ],
-  pause: [
-    /\b(hey\s+)?medexa\s+pause\s+(recording|session)\b/,
-    /\bpause\s+(recording|session)\b/,
-    /^pause$/,
-  ],
-  stop: [
-    /\b(hey\s+)?medexa\s+(stop|end)\s+(recording|session)\b/,
-    /\b(stop|end)\s+(recording|session)\b/,
-    /^(stop|end)$/,
-  ],
-};
-
-const matchesAny = (text: string, patterns: RegExp[]) => patterns.some((pattern) => pattern.test(text));
-const isLikelyCommand = (text: string) =>
-  hasMedexaPrefix(text) || matchesAny(text, [...commandPatterns.pause, ...commandPatterns.stop, ...commandPatterns.startRecording]);
-
 const getBestAlternative = (result: SpeechRecognitionResult) => {
   let best = result[0];
 
@@ -139,29 +113,22 @@ const getBestAlternative = (result: SpeechRecognitionResult) => {
   return best;
 };
 
-const formatElapsed = (value: number) => {
-  const totalSeconds = Math.max(0, Math.floor(value / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours.toString().padStart(2, "0")}:${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-  }
-
-  return `${minutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
-};
-
 export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { locale, t, formatDuration } = useGCCLocale();
+  const speechLanguage = speechLanguages[locale];
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const recognitionActiveRef = useRef(false);
+  const speechLanguageRef = useRef(speechLanguage);
+  const languageTransitionRef = useRef(0);
   const shouldRecognitionRunRef = useRef(false);
   const recognitionStartingRef = useRef(false);
   const manualStopRef = useRef(false);
   const modeRef = useRef<RecognitionMode>("off");
   const statusRef = useRef<SessionStatus>("idle");
   const sessionIdRef = useRef<string | null>(null);
+  const sessionPatientRef = useRef<GCCSessionPatient | null>(null);
   const finalTranscriptRef = useRef("");
   const interimTranscriptRef = useRef("");
   const commandCooldownRef = useRef(0);
@@ -194,10 +161,13 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   const [latestHeardText, setLatestHeardText] = useState("");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorMessageKey, setErrorMessage] = useState<string | null>(null);
   const [lastCommand, setLastCommand] = useState<string | null>(null);
-  const [finalizationMessage, setFinalizationMessage] = useState<string | null>(null);
-  const [finalizationError, setFinalizationError] = useState<string | null>(null);
+  const [finalizationMessageKey, setFinalizationMessage] = useState<string | null>(null);
+  const [finalizationErrorKey, setFinalizationError] = useState<string | null>(null);
+  const errorMessage = errorMessageKey ? t(errorMessageKey) : null;
+  const finalizationMessage = finalizationMessageKey ? t(finalizationMessageKey) : null;
+  const finalizationError = finalizationErrorKey ? t(finalizationErrorKey) : null;
 
   const setSafeStatus = useCallback((nextStatus: SessionStatus) => {
     statusRef.current = nextStatus;
@@ -213,10 +183,16 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       transcriptSegments: transcriptSegmentsRef.current,
       elapsedMs: accumulatedMsRef.current + (sessionStartedAtRef.current ? performance.now() - sessionStartedAtRef.current : 0),
       startedAt: sessionStartedAtRef.current,
+      patient: sessionPatientRef.current ?? undefined,
       ...override,
     };
     window.sessionStorage.setItem(storageKey, JSON.stringify(payload));
   }, []);
+
+  const setSessionPatient = useCallback((patient: GCCSessionPatient) => {
+    sessionPatientRef.current = patient;
+    persistSession({ patient });
+  }, [persistSession]);
 
   const saveRecoveryDraft = useCallback((payload: { sessionId: string; transcript: string; elapsedMs: number; status: "finalizing" | "failed" }) => {
     if (typeof window === "undefined") return;
@@ -272,7 +248,10 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   }, [clearRestartTimeout]);
 
   const waitForRecognitionEnd = useCallback(() => {
-    if (!recognitionRef.current || !isRecognitionActive) {
+    if (
+      !recognitionRef.current ||
+      (!recognitionActiveRef.current && !recognitionStartingRef.current)
+    ) {
       return Promise.resolve();
     }
 
@@ -286,12 +265,12 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       recognitionEndWaitersRef.current.push(finish);
       window.setTimeout(finish, 1500);
     });
-  }, [isRecognitionActive]);
+  }, []);
 
   const startRecognition = useCallback((mode: RecognitionMode) => {
     const SpeechRecognition = getSpeechRecognitionConstructor();
     if (!SpeechRecognition) {
-      setErrorMessage(unsupportedMessage);
+      setErrorMessage("session.voice.unsupported");
       setSafeStatus("error");
       return false;
     }
@@ -301,9 +280,10 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.maxAlternatives = 3;
-      recognition.lang = "en-US";
+      recognition.lang = speechLanguageRef.current;
       recognition.onstart = () => {
         recognitionStartingRef.current = false;
+        recognitionActiveRef.current = true;
         networkRetryRef.current = 0;
         setIsRecognitionActive(true);
         setErrorMessage(null);
@@ -316,20 +296,21 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           permissionStatusRef.current = "denied";
           setPermissionStatus("denied");
-          setErrorMessage("Microphone permission is required for Medexa voice commands.");
+          setErrorMessage("session.voice.microphoneRequired");
           safeStopRecognition("abort");
           return;
         }
 
         if (event.error === "network") {
           networkRetryRef.current = Math.min(networkRetryRef.current + 1, 4);
-          setErrorMessage("Voice recognition network connection was interrupted. Retrying...");
+          setErrorMessage("session.voice.networkInterrupted");
         } else if (event.error !== "no-speech" && event.error !== "aborted") {
-          setErrorMessage(event.message || "Voice recognition was interrupted.");
+          setErrorMessage("session.voice.interrupted");
         }
       };
       recognition.onend = () => {
         recognitionStartingRef.current = false;
+        recognitionActiveRef.current = false;
         setIsRecognitionActive(false);
         const waiters = recognitionEndWaitersRef.current;
         recognitionEndWaitersRef.current = [];
@@ -341,11 +322,13 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       recognitionRef.current = recognition;
     }
 
+    recognitionRef.current.lang = speechLanguageRef.current;
+
     modeRef.current = mode;
     shouldRecognitionRunRef.current = true;
     manualStopRef.current = false;
 
-    if (recognitionStartingRef.current || isRecognitionActive) {
+    if (recognitionStartingRef.current || recognitionActiveRef.current) {
       return true;
     }
 
@@ -358,10 +341,10 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       if (error instanceof DOMException && error.name === "InvalidStateError") {
         return true;
       }
-      setErrorMessage(error instanceof Error ? error.message : "Unable to start live voice recognition.");
+      setErrorMessage("session.voice.startFailed");
       return false;
     }
-  }, [isRecognitionActive, safeStopRecognition, setSafeStatus]);
+  }, [safeStopRecognition, setSafeStatus]);
 
   const requestMicrophonePermission = useCallback(async () => {
     if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
@@ -378,14 +361,14 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     } catch {
       permissionStatusRef.current = "denied";
       setPermissionStatus("denied");
-      setErrorMessage("Microphone permission is required for Medexa voice commands.");
+      setErrorMessage("session.voice.microphoneRequired");
       return false;
     }
   }, []);
 
   const enableVoiceControl = useCallback(async () => {
     if (!getSpeechRecognitionConstructor()) {
-      setErrorMessage(unsupportedMessage);
+      setErrorMessage("session.voice.unsupported");
       setSafeStatus("error");
       return false;
     }
@@ -408,6 +391,54 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       startRecognition(modeRef.current);
     }, 350 + networkRetryRef.current * 250);
   }, [clearRestartTimeout, startRecognition]);
+
+  useEffect(() => {
+    speechLanguageRef.current = speechLanguage;
+    const recognition = recognitionRef.current;
+    if (!recognition || recognition.lang === speechLanguage) return;
+
+    const transition = languageTransitionRef.current + 1;
+    languageTransitionRef.current = transition;
+    const modeBeforeSwitch = modeRef.current;
+    const shouldRestart =
+      shouldRecognitionRunRef.current &&
+      modeBeforeSwitch !== "off" &&
+      permissionStatusRef.current !== "denied" &&
+      !finalizingRef.current &&
+      !stoppedRef.current;
+
+    clearRestartTimeout();
+    shouldRecognitionRunRef.current = false;
+    manualStopRef.current = true;
+    interimTranscriptRef.current = "";
+    setInterimTranscript("");
+
+    const applyLanguageAndRestart = () => {
+      if (!mountedRef.current || transition !== languageTransitionRef.current) return;
+      recognition.lang = speechLanguage;
+      if (
+        shouldRestart &&
+        modeRef.current === modeBeforeSwitch &&
+        !finalizingRef.current &&
+        !stoppedRef.current
+      ) {
+        startRecognition(modeBeforeSwitch);
+      }
+    };
+
+    if (!recognitionActiveRef.current && !recognitionStartingRef.current) {
+      applyLanguageAndRestart();
+      return;
+    }
+
+    try {
+      recognition.stop();
+    } catch {
+      // The recognizer may finish between the active-state check and stop().
+    }
+
+    void waitForRecognitionEnd().then(applyLanguageAndRestart);
+  }, [clearRestartTimeout, speechLanguage, startRecognition, waitForRecognitionEnd]);
 
   const appendFinalTranscript = useCallback((text: string, confidence?: number) => {
     const cleanText = text.trim();
@@ -465,7 +496,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     finalizingRef.current = true;
     stoppedRef.current = true;
     setSafeStatus("stopping");
-    setFinalizationMessage("Finalizing transcript and generating review...");
+    setFinalizationMessage("session.finalize.inProgress");
     setFinalizationError(null);
     const id = sessionIdRef.current ?? generateSessionId();
     sessionIdRef.current = id;
@@ -488,7 +519,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       });
 
       if (!transcript) {
-        throw new Error("No clinical transcript was captured. Continue the session or enter a note before generating SOAP.");
+        throw new Error("NO_TRANSCRIPT");
       }
 
       saveRecoveryDraft({ sessionId: id, transcript, elapsedMs: frozenElapsed, status: "finalizing" });
@@ -497,14 +528,16 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
         transcript,
         transcriptSegments: transcriptSegmentsRef.current,
         elapsedMs: frozenElapsed,
+        locale,
+        patient: sessionPatientRef.current ?? undefined,
       });
 
       if (response.saved_to_store !== true || !response.review_bundle?.soap_note || !response.review_bundle.billing_intelligence || !response.review_bundle.patient_summary) {
-        throw new Error("Review generation could not be completed. Your transcript has been saved.");
+        throw new Error("FINALIZE_INCOMPLETE");
       }
 
-      const reviewBundle = buildReviewBundleFromFinalizeResponse(response);
-      saveReviewBundleLocally(reviewBundle);
+      const reviewBundle = buildReviewBundleFromFinalizeResponse(response, locale);
+      saveReviewBundleLocally(reviewBundle, locale);
       saveSoapLocally({
         sessionId: id,
         soapNote: response.review_bundle.soap_note,
@@ -512,16 +545,17 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
         transcript,
         llmUsed: response.llm_used,
         fallbackReason: response.fallback_reason,
+        locale,
       });
       setSafeStatus("stopped");
       persistSession({ status: "stopped", elapsedMs: frozenElapsed });
       setFinalizationMessage(null);
       router.push(`/soap-notes?sessionId=${encodeURIComponent(id)}`);
     } catch (error) {
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Review generation could not be completed. Your transcript has been saved.";
+      const messageKey =
+        error instanceof Error && error.message === "NO_TRANSCRIPT"
+          ? "session.finalize.noTranscript"
+          : "session.finalize.failedSaved";
       const failedElapsed = calculateElapsed();
       const transcript = buildFinalTranscript({
         finalTranscript: finalTranscriptRef.current,
@@ -536,7 +570,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       stopTimerInterval();
       setSafeStatus("stopped");
       setFinalizationMessage(null);
-      setFinalizationError(message);
+      setFinalizationError(messageKey);
       persistSession({ status: "stopped", elapsedMs: failedElapsed });
       finalizingRef.current = false;
       stoppedRef.current = false;
@@ -544,6 +578,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   }, [
     calculateElapsed,
     flushRecognitionBeforeFinalize,
+    locale,
     persistSession,
     router,
     saveRecoveryDraft,
@@ -584,6 +619,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
 
   const clearSession = useCallback(() => {
     sessionIdRef.current = null;
+    sessionPatientRef.current = null;
     setSessionId(null);
     finalTranscriptRef.current = "";
     interimTranscriptRef.current = "";
@@ -620,6 +656,9 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     finalizingRef.current = false;
     stoppedRef.current = false;
     sessionIdRef.current = id;
+    if (options?.patient) {
+      sessionPatientRef.current = options.patient;
+    }
     setSessionId(id);
     if (!options?.preserveTranscript) {
       finalTranscriptRef.current = "";
@@ -638,7 +677,12 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     setSafeStatus("recording");
     startTimerInterval();
     startRecognition("session-transcription");
-    persistSession({ sessionId: id, status: "recording", source: options?.source ?? "manual" });
+    persistSession({
+      sessionId: id,
+      status: "recording",
+      source: options?.source ?? "manual",
+      patient: sessionPatientRef.current ?? undefined,
+    });
     return id;
   }, [enableVoiceControl, persistSession, setSafeStatus, startRecognition, startTimerInterval]);
 
@@ -658,7 +702,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   }, [finalizeAndNavigateToSoap]);
 
   const handleVoiceCommand = useCallback((rawText: string) => {
-    const normalized = normalizeCommandText(rawText);
+    const normalized = normalizeVoiceCommandText(rawText);
     if (!normalized) return false;
 
     const now = Date.now();
@@ -672,30 +716,35 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       setLastCommand(command);
     };
 
-    if (modeRef.current === "ambient-command" && matchesAny(normalized, commandPatterns.startSession)) {
-      markCommand("start-session");
+    const command =
+      modeRef.current === "ambient-command"
+        ? detectAmbientVoiceCommand(normalized)
+        : modeRef.current === "session-transcription" || modeRef.current === "paused-command-only"
+          ? detectSessionVoiceCommand(normalized)
+          : null;
+
+    if (command === "start-session") {
+      markCommand(command);
       void navigateToSessionFromVoice();
       return true;
     }
 
-    if (modeRef.current === "session-transcription" || modeRef.current === "paused-command-only") {
-      if (matchesAny(normalized, commandPatterns.stop) && (hasMedexaPrefix(normalized) || /^(stop|end)(\s+(recording|session))?$/.test(normalized))) {
-        markCommand("stop-recording");
-        void finalizeAndNavigateToSoap();
-        return true;
-      }
+    if (command === "stop-recording") {
+      markCommand(command);
+      void finalizeAndNavigateToSoap();
+      return true;
+    }
 
-      if (matchesAny(normalized, commandPatterns.pause) && (hasMedexaPrefix(normalized) || /^pause(\s+(recording|session))?$/.test(normalized))) {
-        markCommand("pause-recording");
-        pauseSession();
-        return true;
-      }
+    if (command === "pause-recording") {
+      markCommand(command);
+      pauseSession();
+      return true;
+    }
 
-      if (matchesAny(normalized, commandPatterns.startRecording) && (hasMedexaPrefix(normalized) || /^(start|resume)(\s+(recording|session))?$/.test(normalized))) {
-        markCommand("resume-recording");
-        resumeSession();
-        return true;
-      }
+    if (command === "resume-recording") {
+      markCommand(command);
+      resumeSession();
+      return true;
     }
 
     return false;
@@ -711,7 +760,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       latestHeardTextRef.current = text;
       setLatestHeardText(text);
       const isCommand = handleVoiceCommand(text);
-      if (isCommand || isLikelyCommand(normalizeCommandText(text))) {
+      if (isCommand) {
         if (result.isFinal) {
           interimTranscriptRef.current = "";
           setInterimTranscript("");
@@ -760,12 +809,19 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     mountedRef.current = true;
-    if (typeof window !== "undefined") {
+    let cancelled = false;
+
+    // Restore browser storage after the effect has subscribed. Deferring the
+    // update keeps hydration deterministic while still restoring in the same
+    // task turn, before the clinician can meaningfully interact with controls.
+    void Promise.resolve().then(() => {
+      if (cancelled || typeof window === "undefined") return;
       const saved = window.sessionStorage.getItem(storageKey);
       if (saved) {
         try {
           const parsed = JSON.parse(saved) as PersistedVoiceSession;
           sessionIdRef.current = parsed.sessionId;
+          sessionPatientRef.current = parsed.patient ?? null;
           finalTranscriptRef.current = parsed.finalTranscript ?? "";
           transcriptSegmentsRef.current = parsed.transcriptSegments ?? [];
           accumulatedMsRef.current = parsed.elapsedMs ?? 0;
@@ -778,10 +834,13 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
           window.sessionStorage.removeItem(storageKey);
         }
       }
-    }
+    });
 
     return () => {
+      cancelled = true;
       mountedRef.current = false;
+      languageTransitionRef.current += 1;
+      recognitionActiveRef.current = false;
       stopTimerInterval();
       clearRestartTimeout();
       if (recognitionRef.current) {
@@ -797,7 +856,6 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.permissions?.query) {
       permissionStatusRef.current = "unknown";
-      setPermissionStatus("unknown");
       return;
     }
 
@@ -833,6 +891,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
 
     recognition.onstart = () => {
       recognitionStartingRef.current = false;
+      recognitionActiveRef.current = true;
       networkRetryRef.current = 0;
       setIsRecognitionActive(true);
       setErrorMessage(null);
@@ -843,20 +902,21 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         permissionStatusRef.current = "denied";
         setPermissionStatus("denied");
-        setErrorMessage("Microphone permission is required for Medexa voice commands.");
+        setErrorMessage("session.voice.microphoneRequired");
         safeStopRecognition("abort");
         return;
       }
 
       if (event.error === "network") {
         networkRetryRef.current = Math.min(networkRetryRef.current + 1, 4);
-        setErrorMessage("Voice recognition network connection was interrupted. Retrying...");
+        setErrorMessage("session.voice.networkInterrupted");
       } else if (event.error !== "no-speech" && event.error !== "aborted") {
-        setErrorMessage(event.message || "Voice recognition was interrupted.");
+        setErrorMessage("session.voice.interrupted");
       }
     };
     recognition.onend = () => {
       recognitionStartingRef.current = false;
+      recognitionActiveRef.current = false;
       setIsRecognitionActive(false);
       const waiters = recognitionEndWaitersRef.current;
       recognitionEndWaitersRef.current = [];
@@ -906,13 +966,14 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       stopSession,
       restartRecognition,
       clearSession,
-      formatElapsedTime: (valueToFormat = elapsedMs) => formatElapsed(valueToFormat),
+      formatElapsedTime: (valueToFormat = elapsedMs) => formatDuration(valueToFormat),
       handleVoiceCommand,
       navigateToSessionFromVoice,
       finalizeAndNavigateToSoap,
       finalizationMessage,
       finalizationError,
       retryFinalize,
+      setSessionPatient,
     }),
     [
       clearSession,
@@ -920,6 +981,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       enableVoiceControl,
       errorMessage,
       finalTranscript,
+      formatDuration,
       finalizeAndNavigateToSoap,
       finalizationError,
       finalizationMessage,
@@ -933,6 +995,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       permissionStatus,
       restartRecognition,
       retryFinalize,
+      setSessionPatient,
       resumeSession,
       sessionId,
       startAmbientCommandListening,

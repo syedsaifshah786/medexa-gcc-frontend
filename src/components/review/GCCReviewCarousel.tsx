@@ -8,6 +8,7 @@ import GCCPatientSummaryCard from "@/components/review/GCCPatientSummaryCard";
 import GCCReviewActions from "@/components/review/GCCReviewActions";
 import GCCReviewShell from "@/components/review/GCCReviewShell";
 import GCCSoapReviewCard from "@/components/review/GCCSoapReviewCard";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
 import { useGCCReviewData } from "@/hooks/useGCCReviewData";
 
 type GCCReviewCarouselProps = {
@@ -18,21 +19,21 @@ type ReviewSlideIndex = 0 | 1 | 2;
 
 const routes = ["/soap-notes", "/billing-intelligence", "/patient-summary"] as const;
 
-const slideMeta = [
+const slideMetaKeys = [
   {
-    title: "SOAP Notes",
-    subtitle: "Validate clinical objects generated from ambient recording.",
-    exportMessage: "SOAP Notes export prepared",
+    title: "review.soap.title",
+    subtitle: "review.soap.subtitle",
+    exportMessage: "review.toast.soapExportPrepared",
   },
   {
-    title: "Billing Intelligence",
-    subtitle: "Medexa AI has mapped documentation to GCC standard coding systems.",
-    exportMessage: "Billing Intelligence export prepared",
+    title: "review.billing.title",
+    subtitle: "review.billing.subtitle",
+    exportMessage: "review.toast.billingExportPrepared",
   },
   {
-    title: "Patient Summary",
-    subtitle: "Share this Medexa summary with the patient what we worked on.",
-    exportMessage: "Patient Summary export prepared",
+    title: "review.summary.title",
+    subtitle: "review.summary.subtitle",
+    exportMessage: "review.toast.summaryExportPrepared",
   },
 ] as const;
 
@@ -47,6 +48,7 @@ const getRouteIndex = (pathname: string): ReviewSlideIndex => {
 
 export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProps) {
   const router = useRouter();
+  const { direction, locale, t } = useGCCLocale();
   const {
     sessionId,
     status: reviewStatus,
@@ -75,12 +77,17 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
   const [viewportWidth, setViewportWidth] = useState(0);
   const [cardWidth, setCardWidth] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
-  const [toast, setToast] = useState("");
+  const [toastKey, setToastKey] = useState("");
   const [patientCompleted, setPatientCompleted] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const isReviewLoading = reviewStatus === "loading";
   const isReviewReady = reviewStatus === "ready" && Boolean(soapNote && billingIntelligence && patientSummary);
-  const cardError = reviewStatus === "error" ? reviewError ?? "Session review data could not be loaded." : null;
+  const cardError = reviewStatus === "error" ? reviewError ?? t("review.error.load") : null;
+  const slideMeta = slideMetaKeys.map((meta) => ({
+    title: t(meta.title),
+    subtitle: t(meta.subtitle),
+    exportMessageKey: meta.exportMessage,
+  }));
 
   const gap = viewportWidth < 768 ? 18 : 72;
   const stepDistance = cardWidth + gap;
@@ -93,6 +100,11 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
     ],
     [billingIntelligence, cardError, isReviewLoading, patientCompleted, patientSummary, refresh, soapNote],
   );
+  const visualCards = useMemo(() => {
+    const entries = cards.map((card, semanticIndex) => ({ card, semanticIndex: semanticIndex as ReviewSlideIndex }));
+    return direction === "rtl" ? entries.reverse() : entries;
+  }, [cards, direction]);
+  const activeVisualIndex = direction === "rtl" ? routes.length - 1 - activeIndex : activeIndex;
 
   useEffect(() => {
     activeIndexRef.current = activeIndex;
@@ -128,10 +140,10 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
   }, []);
 
   useEffect(() => {
-    if (!toast) return;
-    const timeoutId = window.setTimeout(() => setToast(""), 2400);
+    if (!toastKey) return;
+    const timeoutId = window.setTimeout(() => setToastKey(""), 2400);
     return () => window.clearTimeout(timeoutId);
-  }, [toast]);
+  }, [toastKey]);
 
   useEffect(
     () => () => {
@@ -242,10 +254,11 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
     }
 
     event.preventDefault();
-    const dampedDelta =
-      (activeIndex === 0 && deltaX > 0) || (activeIndex === routes.length - 1 && deltaX < 0)
-        ? deltaX * 0.28
-        : deltaX;
+    const navigationDelta = direction === "rtl" ? deltaX : -deltaX;
+    const isBeyondEdge =
+      (activeIndex === 0 && navigationDelta < 0) ||
+      (activeIndex === routes.length - 1 && navigationDelta > 0);
+    const dampedDelta = isBeyondEdge ? deltaX * 0.28 : deltaX;
     dragOffsetRef.current = dampedDelta;
     setDragOffset(dampedDelta);
   };
@@ -257,7 +270,8 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
     const finalOffset = dragOffsetRef.current;
 
     if (isDragging && Math.abs(finalOffset) >= threshold) {
-      goToIndex(finalOffset < 0 ? activeIndex + 1 : activeIndex - 1);
+      const navigationDelta = direction === "rtl" ? finalOffset : -finalOffset;
+      goToIndex(navigationDelta > 0 ? activeIndex + 1 : activeIndex - 1);
     }
 
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
@@ -276,10 +290,10 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowRight") {
       event.preventDefault();
-      goToIndex(activeIndex + 1);
+      goToIndex(activeIndex + (direction === "rtl" ? -1 : 1));
     } else if (event.key === "ArrowLeft") {
       event.preventDefault();
-      goToIndex(activeIndex - 1);
+      goToIndex(activeIndex + (direction === "rtl" ? 1 : -1));
     }
   };
 
@@ -297,7 +311,7 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
 
   const handleExport = () => {
     if (!isReviewReady) {
-      setToast("No completed session data is available to export.");
+      setToastKey("review.toast.noExportData");
       return;
     }
 
@@ -308,6 +322,8 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
       soapNote,
       billingIntelligence,
       patientSummary,
+      locale,
+      direction,
       exportedAt: new Date().toISOString(),
     };
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
@@ -317,10 +333,10 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
     link.download = `medexa-gcc-review-${sessionId}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setToast(currentMeta.exportMessage);
+    setToastKey(currentMeta.exportMessageKey);
   };
 
-  const trackOffset = viewportWidth && cardWidth ? viewportWidth / 2 - cardWidth / 2 - activeIndex * stepDistance + dragOffset : 0;
+  const trackOffset = viewportWidth && cardWidth ? viewportWidth / 2 - cardWidth / 2 - activeVisualIndex * stepDistance + dragOffset : 0;
   const transition = isDragging || reducedMotion ? "none" : `transform ${transitionMs}ms cubic-bezier(0.22, 1, 0.36, 1)`;
 
   return (
@@ -328,7 +344,7 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
       <section
         ref={viewportRef}
         role="region"
-        aria-label="Medexa GCC review card carousel"
+        aria-label={t("review.carouselAria")}
         tabIndex={0}
         onKeyDown={handleKeyDown}
         onPointerDown={handlePointerDown}
@@ -339,6 +355,7 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
         style={{ touchAction: "pan-y", contain: "layout paint", cursor: isDragging ? "grabbing" : "grab" }}
       >
         <div
+          dir="ltr"
           className="flex items-start py-3"
           style={{
             gap,
@@ -349,18 +366,21 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
             transformStyle: "preserve-3d",
           }}
         >
-          {cards.map((card, index) => {
-            const distance = index - activeIndex;
-            const isActive = index === activeIndex;
+          {visualCards.map(({ card, semanticIndex }, visualIndex) => {
+            const distance = visualIndex - activeVisualIndex;
+            const isActive = semanticIndex === activeIndex;
             const rotate = viewportWidth < 768 ? Math.sign(distance) * 2 : Math.sign(distance) * 4;
             const scale = isActive ? 1 : viewportWidth < 768 ? 0.96 : 0.92;
 
             return (
               <div
-                key={routes[index]}
-                ref={index === 0 ? firstCardRef : undefined}
+                key={routes[semanticIndex]}
+                ref={visualIndex === 0 ? firstCardRef : undefined}
+                dir={direction}
                 aria-current={isActive ? "step" : undefined}
-                aria-label={`${slideMeta[index].title} review card`}
+                aria-label={t("review.slideAria", { title: slideMeta[semanticIndex].title })}
+                aria-hidden={!isActive}
+                inert={!isActive}
                 className={`w-[calc(100vw-28px)] flex-none md:w-[690px] lg:w-[720px] ${isActive ? "pointer-events-auto z-30" : "pointer-events-none z-10"}`}
                 style={{
                   opacity: isActive ? 1 : 0.45,
@@ -377,8 +397,8 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
         </div>
       </section>
 
-      <GCCReviewActions onExport={handleExport} onSend={handleSend} sendLabel="Send" disabled={!isReviewReady} />
-      {toast && <ReviewToast message={toast} />}
+      <GCCReviewActions onExport={handleExport} onSend={handleSend} disabled={!isReviewReady} />
+      {toastKey && <ReviewToast message={t(toastKey)} />}
       {isSuccessModalOpen && (
         <ReviewSuccessModal
           sessionId={sessionId}

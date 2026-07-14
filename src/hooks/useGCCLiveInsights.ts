@@ -1,7 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { translate } from "@/i18n";
+import type { GCCLocale } from "@/i18n/types";
 import { requestGCCLiveInsights } from "@/lib/gcc/live-insights-api";
+import { formatNumber, GCC_LOCALE_TAGS } from "@/lib/i18n/formatters";
 import type {
   GCCClaimReadiness,
   GCCLiveInsightsPatient,
@@ -22,6 +25,7 @@ const emptyIds: readonly string[] = [];
 
 type InsightsState = {
   sessionId: string | null;
+  locale: GCCLocale | null;
   suggestions: GCCLiveSuggestion[];
   claimReadiness: GCCClaimReadiness | null;
   status: Exclude<GCCLiveInsightsStatus, "paused">;
@@ -30,12 +34,14 @@ type InsightsState = {
 
 type StableInterimState = {
   sessionId: string | null;
+  locale: GCCLocale | null;
   source: string;
   value: string;
 };
 
 type RequestCandidate = {
   sessionId: string | null;
+  locale: GCCLocale;
   isRecording: boolean;
   isPaused: boolean;
   isFinalizing: boolean;
@@ -47,6 +53,7 @@ type RequestCandidate = {
 
 const initialState: InsightsState = {
   sessionId: null,
+  locale: null,
   suggestions: [],
   claimReadiness: null,
   status: "idle",
@@ -56,7 +63,7 @@ const initialState: InsightsState = {
 function normalizeTranscript(value: string) {
   return value
     .replace(/\s+/g, " ")
-    .replace(/\s+([,.!?;:])/g, "$1")
+    .replace(/\s+([,.!?;:،؛؟])/g, "$1")
     .trim();
 }
 
@@ -188,7 +195,20 @@ function collectExclusionIds(
   return [...result];
 }
 
-function readinessFromActiveSuggestions(suggestions: readonly GCCLiveSuggestion[]): GCCClaimReadiness {
+function readinessSummaryKey(
+  kind: "issues" | "reviewItems",
+  count: number,
+  locale: GCCLocale,
+) {
+  const plural = new Intl.PluralRules(GCC_LOCALE_TAGS[locale]).select(count);
+  const form = plural === "one" || plural === "two" ? plural : "other";
+  return `session.claimReadiness.${kind}.${form}`;
+}
+
+function readinessFromActiveSuggestions(
+  suggestions: readonly GCCLiveSuggestion[],
+  locale: GCCLocale,
+): GCCClaimReadiness {
   const activeSuggestions = suggestions.filter((suggestion) => suggestion.status === "active");
   const blockingIssues = activeSuggestions.filter((suggestion) => suggestion.claimImpact === "blocking").length;
   const warnings = activeSuggestions.filter((suggestion) => suggestion.claimImpact === "warning").length;
@@ -197,7 +217,9 @@ function readinessFromActiveSuggestions(suggestions: readonly GCCLiveSuggestion[
     return {
       blockingIssues,
       warnings,
-      summary: `${blockingIssues} ${blockingIssues === 1 ? "issue" : "issues"} found that may impact claim approval.`,
+      summary: translate(locale, readinessSummaryKey("issues", blockingIssues, locale), {
+        count: formatNumber(blockingIssues, locale),
+      }),
     };
   }
 
@@ -205,11 +227,17 @@ function readinessFromActiveSuggestions(suggestions: readonly GCCLiveSuggestion[
     return {
       blockingIssues,
       warnings,
-      summary: `${warnings} ${warnings === 1 ? "item requires" : "items require"} clinician review.`,
+      summary: translate(locale, readinessSummaryKey("reviewItems", warnings, locale), {
+        count: formatNumber(warnings, locale),
+      }),
     };
   }
 
-  return { blockingIssues: 0, warnings: 0, summary: "No active documentation issues detected yet." };
+  return {
+    blockingIssues: 0,
+    warnings: 0,
+    summary: translate(locale, "session.claimReadiness.noIssues"),
+  };
 }
 
 function isAbortError(error: unknown) {
@@ -217,6 +245,7 @@ function isAbortError(error: unknown) {
 }
 
 export function useGCCLiveInsights({
+  locale,
   sessionId,
   isRecording,
   isPaused,
@@ -232,11 +261,13 @@ export function useGCCLiveInsights({
   const [state, setState] = useState<InsightsState>(initialState);
   const [stableInterimState, setStableInterimState] = useState<StableInterimState>({
     sessionId: null,
+    locale: null,
     source: "",
     value: "",
   });
 
   const activeSessionIdRef = useRef<string | null>(null);
+  const activeLocaleRef = useRef<GCCLocale>(locale);
   const suggestionsRef = useRef<GCCLiveSuggestion[]>([]);
   const localApprovedIdsRef = useRef(new Set<string>());
   const localIgnoredIdsRef = useRef(new Set<string>());
@@ -244,6 +275,7 @@ export function useGCCLiveInsights({
   const externalIgnoredIdsRef = useRef<ReadonlySet<string>>(new Set());
   const latestCandidateRef = useRef<RequestCandidate>({
     sessionId: null,
+    locale,
     isRecording: false,
     isPaused: false,
     isFinalizing: false,
@@ -270,20 +302,24 @@ export function useGCCLiveInsights({
     if (!normalizedInterimTranscript) return;
 
     const stableSessionId = sessionId;
+    const stableLocale = locale;
     const stableSource = normalizedInterimTranscript;
     const timer = window.setTimeout(() => {
       setStableInterimState({
         sessionId: stableSessionId,
+        locale: stableLocale,
         source: stableSource,
         value: stableSource,
       });
     }, interimStabilityMs);
 
     return () => window.clearTimeout(timer);
-  }, [normalizedInterimTranscript, sessionId]);
+  }, [locale, normalizedInterimTranscript, sessionId]);
 
   const stableInterimTranscript =
-    stableInterimState.sessionId === sessionId && stableInterimState.source === normalizedInterimTranscript
+    stableInterimState.sessionId === sessionId &&
+    stableInterimState.locale === locale &&
+    stableInterimState.source === normalizedInterimTranscript
       ? stableInterimState.value
       : "";
   const requestTranscript = useMemo(
@@ -302,6 +338,7 @@ export function useGCCLiveInsights({
   useEffect(() => {
     latestCandidateRef.current = {
       sessionId,
+      locale,
       isRecording,
       isPaused,
       isFinalizing,
@@ -310,7 +347,7 @@ export function useGCCLiveInsights({
       elapsedMs,
       patient,
     };
-  }, [elapsedMs, isFinalizing, isPaused, isRecording, patient, requestTranscript, sessionId, transcriptSegments]);
+  }, [elapsedMs, isFinalizing, isPaused, isRecording, locale, patient, requestTranscript, sessionId, transcriptSegments]);
 
   const clearDebounceTimer = useCallback(() => {
     if (debounceTimerRef.current !== null) {
@@ -351,6 +388,7 @@ export function useGCCLiveInsights({
     if (
       !candidate.sessionId ||
       candidate.sessionId !== activeSessionIdRef.current ||
+      candidate.locale !== activeLocaleRef.current ||
       !candidate.isRecording ||
       candidate.isPaused ||
       candidate.isFinalizing ||
@@ -387,14 +425,25 @@ export function useGCCLiveInsights({
 
     setState((current) => ({
       sessionId: candidate.sessionId,
-      suggestions: current.sessionId === candidate.sessionId ? current.suggestions : [],
-      claimReadiness: current.sessionId === candidate.sessionId ? current.claimReadiness : null,
+      locale: candidate.locale,
+      suggestions:
+        current.sessionId === candidate.sessionId && current.locale === candidate.locale
+          ? current.suggestions
+          : [],
+      claimReadiness:
+        current.sessionId === candidate.sessionId && current.locale === candidate.locale
+          ? current.claimReadiness
+          : null,
       status: "analyzing",
-      lastUpdatedAt: current.sessionId === candidate.sessionId ? current.lastUpdatedAt : null,
+      lastUpdatedAt:
+        current.sessionId === candidate.sessionId && current.locale === candidate.locale
+          ? current.lastUpdatedAt
+          : null,
     }));
 
     try {
       const response = await requestGCCLiveInsights({
+        locale: candidate.locale,
         sessionId: candidate.sessionId,
         transcriptRevision: requestRevision,
         elapsedMs: candidate.elapsedMs,
@@ -410,6 +459,7 @@ export function useGCCLiveInsights({
       if (
         requestSequence !== requestSequenceRef.current ||
         candidate.sessionId !== activeSessionIdRef.current ||
+        candidate.locale !== activeLocaleRef.current ||
         response.sessionId !== candidate.sessionId ||
         response.transcriptRevision !== requestRevision
       ) {
@@ -418,7 +468,9 @@ export function useGCCLiveInsights({
 
       if (response.transcriptRevision < transcriptRevisionRef.current) {
         setState((current) =>
-          current.sessionId === candidate.sessionId && current.status === "analyzing"
+          current.sessionId === candidate.sessionId &&
+          current.locale === candidate.locale &&
+          current.status === "analyzing"
             ? { ...current, status: current.lastUpdatedAt ? "updated" : "idle" }
             : current,
         );
@@ -438,6 +490,7 @@ export function useGCCLiveInsights({
       const updatedAt = Date.now();
       setState({
         sessionId: candidate.sessionId,
+        locale: candidate.locale,
         suggestions: nextSuggestions,
         claimReadiness: response.claimReadiness,
         status: "updated",
@@ -447,10 +500,13 @@ export function useGCCLiveInsights({
       if (isAbortError(error)) {
         if (
           requestSequence === requestSequenceRef.current &&
-          candidate.sessionId === activeSessionIdRef.current
+          candidate.sessionId === activeSessionIdRef.current &&
+          candidate.locale === activeLocaleRef.current
         ) {
           setState((current) =>
-            current.sessionId === candidate.sessionId && current.status === "analyzing"
+            current.sessionId === candidate.sessionId &&
+            current.locale === candidate.locale &&
+            current.status === "analyzing"
               ? { ...current, status: current.lastUpdatedAt ? "updated" : "idle" }
               : current,
           );
@@ -459,15 +515,16 @@ export function useGCCLiveInsights({
       }
       if (requestSequence !== requestSequenceRef.current) return;
       setState((current) =>
-        current.sessionId === candidate.sessionId
-          ? { ...current, status: "unavailable" }
-          : {
-              sessionId: candidate.sessionId,
-              suggestions: [],
-              claimReadiness: null,
-              status: "unavailable",
-              lastUpdatedAt: null,
-            },
+          current.sessionId === candidate.sessionId && current.locale === candidate.locale
+            ? { ...current, status: "unavailable" }
+            : {
+                sessionId: candidate.sessionId,
+                locale: candidate.locale,
+                suggestions: [],
+                claimReadiness: null,
+                status: "unavailable",
+                lastUpdatedAt: null,
+              },
       );
     } finally {
       if (abortControllerRef.current === controller) {
@@ -477,13 +534,30 @@ export function useGCCLiveInsights({
   }, [abortCurrentRequest, clearScheduledRequests, mergedApprovedIds, mergedIgnoredIds]);
 
   useEffect(() => {
-    if (activeSessionIdRef.current !== sessionId) {
+    const sessionChanged = activeSessionIdRef.current !== sessionId;
+    const localeChanged = activeLocaleRef.current !== locale;
+
+    if (sessionChanged) {
       clearScheduledRequests();
       abortCurrentRequest();
+      requestSequenceRef.current += 1;
       activeSessionIdRef.current = sessionId;
+      activeLocaleRef.current = locale;
       suggestionsRef.current = [];
       localApprovedIdsRef.current.clear();
       localIgnoredIdsRef.current.clear();
+      transcriptRevisionRef.current = 0;
+      lastRequestedRevisionRef.current = 0;
+      lastObservedTranscriptRef.current = "";
+      lastRequestedTranscriptRef.current = "";
+      lastAcceptedTranscriptRef.current = "";
+      lastRequestStartedAtRef.current = 0;
+    } else if (localeChanged) {
+      clearScheduledRequests();
+      abortCurrentRequest();
+      requestSequenceRef.current += 1;
+      activeLocaleRef.current = locale;
+      suggestionsRef.current = [];
       transcriptRevisionRef.current = 0;
       lastRequestedRevisionRef.current = 0;
       lastObservedTranscriptRef.current = "";
@@ -542,6 +616,7 @@ export function useGCCLiveInsights({
     isFinalizing,
     isPaused,
     isRecording,
+    locale,
     requestTranscript,
     runRequest,
     sessionId,
@@ -560,52 +635,60 @@ export function useGCCLiveInsights({
   const approveSuggestion = useCallback(
     (fingerprint: string) => {
       const normalizedFingerprint = fingerprint.trim();
-      if (!normalizedFingerprint || activeSessionIdRef.current !== sessionId) return;
+      if (
+        !normalizedFingerprint ||
+        activeSessionIdRef.current !== sessionId ||
+        activeLocaleRef.current !== locale
+      ) return;
       localApprovedIdsRef.current.add(normalizedFingerprint);
       localIgnoredIdsRef.current.delete(normalizedFingerprint);
       suggestionsRef.current = suggestionsRef.current.map((suggestion) =>
         suggestion.fingerprint === normalizedFingerprint ? { ...suggestion, status: "approved" } : suggestion,
       );
       setState((current) =>
-        current.sessionId === sessionId
+        current.sessionId === sessionId && current.locale === locale
           ? {
               ...current,
               suggestions: suggestionsRef.current,
               claimReadiness: current.claimReadiness
-                ? readinessFromActiveSuggestions(suggestionsRef.current)
+                ? readinessFromActiveSuggestions(suggestionsRef.current, locale)
                 : null,
             }
           : current,
       );
     },
-    [sessionId],
+    [locale, sessionId],
   );
 
   const ignoreSuggestion = useCallback(
     (fingerprint: string) => {
       const normalizedFingerprint = fingerprint.trim();
-      if (!normalizedFingerprint || activeSessionIdRef.current !== sessionId) return;
+      if (
+        !normalizedFingerprint ||
+        activeSessionIdRef.current !== sessionId ||
+        activeLocaleRef.current !== locale
+      ) return;
       localIgnoredIdsRef.current.add(normalizedFingerprint);
       localApprovedIdsRef.current.delete(normalizedFingerprint);
       suggestionsRef.current = suggestionsRef.current.map((suggestion) =>
         suggestion.fingerprint === normalizedFingerprint ? { ...suggestion, status: "ignored" } : suggestion,
       );
       setState((current) =>
-        current.sessionId === sessionId
+        current.sessionId === sessionId && current.locale === locale
           ? {
               ...current,
               suggestions: suggestionsRef.current,
               claimReadiness: current.claimReadiness
-                ? readinessFromActiveSuggestions(suggestionsRef.current)
+                ? readinessFromActiveSuggestions(suggestionsRef.current, locale)
                 : null,
             }
           : current,
       );
     },
-    [sessionId],
+    [locale, sessionId],
   );
 
-  const isCurrentSession = state.sessionId === sessionId;
+  const isCurrentSession = state.sessionId === sessionId && state.locale === locale;
   const suggestions = useMemo(
     () =>
       withExclusionStatuses(

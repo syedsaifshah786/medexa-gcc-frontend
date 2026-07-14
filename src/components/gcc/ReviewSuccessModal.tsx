@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, type KeyboardEvent } from "react";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
 
 type ReviewSuccessModalProps = {
   sessionId: string | null;
@@ -10,8 +11,10 @@ type ReviewSuccessModalProps = {
 };
 
 export default function ReviewSuccessModal({ sessionId, onClose, onBackHome, onSeeDoc }: ReviewSuccessModalProps) {
+  const { direction, formatNumber, t } = useGCCLocale();
   const modalRef = useRef<HTMLDivElement>(null);
   const titleId = useMemo(() => `review-success-${sessionId ?? "complete"}`, [sessionId]);
+  const descriptionId = `${titleId}-description`;
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -56,6 +59,7 @@ export default function ReviewSuccessModal({ sessionId, onClose, onBackHome, onS
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
+        aria-describedby={descriptionId}
         tabIndex={-1}
         onKeyDown={handleKeyDown}
         className="relative w-full max-w-[480px] rounded-[30px] bg-[linear-gradient(135deg,#55D6FF_0%,#79A8FF_32%,#C9B4FF_58%,#77F0B2_100%)] p-[1.5px] shadow-[0_30px_90px_rgba(8,11,58,0.28),0_0_32px_rgba(85,214,255,0.18),0_0_28px_rgba(119,240,178,0.14)] outline-none"
@@ -72,8 +76,9 @@ export default function ReviewSuccessModal({ sessionId, onClose, onBackHome, onS
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close success dialog"
-            className="absolute right-4 top-4 grid size-9 place-items-center rounded-full border border-[#D8DDF2] bg-white/90 text-[#697085] shadow-[0_8px_20px_rgba(55,65,130,0.08)] transition hover:border-[#AEB7F7] hover:text-[#080B3A]"
+            aria-label={t("review.success.closeAria")}
+            title={t("review.success.closeAria")}
+            className="absolute end-4 top-4 grid size-9 place-items-center rounded-full border border-[#D8DDF2] bg-white/90 text-[#697085] shadow-[0_8px_20px_rgba(55,65,130,0.08)] transition hover:border-[#AEB7F7] hover:text-[#080B3A]"
           >
             <XIcon className="size-4" />
           </button>
@@ -83,10 +88,10 @@ export default function ReviewSuccessModal({ sessionId, onClose, onBackHome, onS
               <SendSparkleIcon className="size-12" />
             </div>
             <h2 id={titleId} className="mt-7 text-[28px] font-semibold leading-9 text-[#080B3A]">
-              Report Sent Successfully
+              {t("review.success.title")}
             </h2>
-            <p className="mx-auto mt-3 max-w-[340px] text-[15px] font-medium leading-6 text-[#697085]">
-              Medexa helped save est. 24 mins of your daily work!
+            <p id={descriptionId} className="mx-auto mt-3 max-w-[340px] text-[15px] font-medium leading-6 text-[#697085]">
+              {t("review.success.timeSaved", { minutes: formatNumber(24) })}
             </p>
           </div>
 
@@ -96,15 +101,15 @@ export default function ReviewSuccessModal({ sessionId, onClose, onBackHome, onS
               onClick={onBackHome}
               className="inline-flex h-12 flex-1 items-center justify-center rounded-full border border-[#D8DDF2] bg-white px-5 text-[14px] font-semibold text-[#080B3A] shadow-[0_8px_20px_rgba(55,65,130,0.06)] transition hover:border-[#AEB7F7] hover:bg-[#F8FBFF]"
             >
-              Back to Home
+              {t("review.success.backHome")}
             </button>
             <button
               type="button"
               onClick={onSeeDoc}
               className="inline-flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-[#080B3A] px-5 text-[14px] font-semibold text-white shadow-[0_14px_30px_rgba(8,11,58,0.22)] transition hover:bg-[#11165a]"
             >
-              See Doc
-              <ArrowRightIcon className="size-4" />
+              {t("review.success.seeDocument")}
+              <ArrowRightIcon className={`size-4 ${direction === "rtl" ? "rotate-180" : ""}`} />
             </button>
           </div>
         </section>

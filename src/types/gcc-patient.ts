@@ -3,6 +3,10 @@ export type GCCUpcomingSession = {
   patientName: string;
   initials: string;
   avatarUrl?: string;
+  dateOfBirth?: string;
+  consentCapturedAt?: string;
+  consentMethod?: "drawn-signature" | "typed-name";
+  consentSignerName?: string;
   sessionType: string;
   sessionDate: string;
   sessionTime: string;

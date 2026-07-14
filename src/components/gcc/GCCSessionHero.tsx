@@ -1,9 +1,12 @@
-import { Mic, Pause, Play, Square } from "lucide-react";
+"use client";
+
+import { Mic, Pause, Play, Square, Timer } from "lucide-react";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
 import type { SessionStatus } from "@/providers/GCCVoiceSessionProvider";
 
 const waveformBars = [
-  14, 20, 12, 28, 18, 34, 16, 25, 38, 22, 15, 32, 19, 40, 26, 17, 35, 21, 13, 29, 18, 37, 24, 14, 31, 20, 12, 27, 17,
-  33, 22, 15, 30, 19, 13,
+  12, 15, 13, 17, 14, 18, 16, 29, 18, 25, 20, 34, 24, 36, 21, 29, 39, 27, 45, 30, 37, 26, 48, 32, 42, 27, 36, 24, 40, 26,
+  34, 21, 29, 19, 31, 20, 27, 17, 23, 16, 20, 14, 17, 13, 15,
 ];
 
 type GCCSessionHeroProps = {
@@ -15,22 +18,33 @@ type GCCSessionHeroProps = {
   onStopRecording: () => void | Promise<void>;
 };
 
-function getSessionMessage(status: SessionStatus) {
+function SessionMessage({ status }: { status: SessionStatus }) {
+  const { t } = useGCCLocale();
+
   switch (status) {
     case "recording":
-      return "Listening to the session...";
+      return (
+        <>
+          {t("session.hero.sayPrefix")}{" "}
+          <strong className="font-bold text-[#071ed2]">
+            {t("session.hero.commandQuote", {
+              command: t("session.hero.stopRecordingCommand"),
+            })}
+          </strong>
+        </>
+      );
     case "paused":
-      return "Session paused \u2014 say \u201cResume session\u201d or press Resume";
+      return <>{t("session.hero.pausedMessage")}</>;
     case "stopping":
-      return "Generating the clinical review...";
+      return <>{t("session.hero.generatingReview")}</>;
     case "starting":
-      return "Starting live listening...";
+      return <>{t("session.hero.startingListening")}</>;
     case "stopped":
-      return "Session stopped";
+      return <>{t("session.hero.sessionStopped")}</>;
     case "error":
-      return "Recording is unavailable. Check microphone access and try again.";
+      return <>{t("session.hero.unavailable")}</>;
     default:
-      return "Press the microphone to start the session";
+      return <>{t("session.hero.startPrompt")}</>;
   }
 }
 
@@ -42,12 +56,17 @@ export default function GCCSessionHero({
   onResumeRecording,
   onStopRecording,
 }: GCCSessionHeroProps) {
+  const { t } = useGCCLocale();
   const isRecording = status === "recording";
   const isPaused = status === "paused";
   const isStarting = status === "starting";
   const isFinalizing = status === "stopping";
   const canControlRecording = isRecording || isPaused;
-  const primaryLabel = isPaused ? "Resume session" : isRecording ? "Pause session" : "Start session";
+  const primaryLabel = isPaused
+    ? t("session.hero.resume")
+    : isRecording
+      ? t("session.hero.pause")
+      : t("session.hero.start");
 
   const handlePrimaryAction = () => {
     if (isPaused) {
@@ -64,32 +83,30 @@ export default function GCCSessionHero({
   };
 
   return (
-    <section
-      aria-label="Recording controls"
-      className="relative mx-auto w-full max-w-[760px] overflow-hidden rounded-[24px] border border-white/80 bg-[radial-gradient(circle_at_50%_18%,rgba(129,140,248,0.24),transparent_50%),linear-gradient(135deg,rgba(255,255,255,0.98),rgba(238,242,255,0.9))] px-4 py-[18px] shadow-[0_18px_50px_rgba(79,70,229,0.12)] sm:px-6"
-    >
-      <div className="pointer-events-none absolute -left-20 top-1/2 size-44 -translate-y-1/2 rounded-full bg-sky-300/15 blur-3xl" />
-      <div className="pointer-events-none absolute -right-20 top-1/2 size-44 -translate-y-1/2 rounded-full bg-violet-400/15 blur-3xl" />
+    <section aria-label={t("session.hero.controls")} className="relative mx-auto w-full max-w-[760px] px-3 pb-4 pt-5 sm:px-6 sm:pb-6 sm:pt-7">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1/2 top-0 size-[280px] -translate-x-1/2 rounded-full opacity-65 [background-image:radial-gradient(circle,rgba(99,102,241,0.3)_1px,transparent_1.4px)] [background-size:10px_10px] [mask-image:radial-gradient(circle,black_0%,rgba(0,0,0,.72)_45%,transparent_76%)] sm:size-[320px]"
+      />
 
       <div className="relative flex flex-col items-center">
-        <div className="flex items-center justify-center gap-5 sm:gap-8">
+        <div dir="ltr" className="grid grid-cols-[52px_118px_52px] items-center justify-center gap-7 sm:grid-cols-[56px_132px_56px] sm:gap-9">
           <button
             type="button"
             onClick={isPaused ? onResumeRecording : onPauseRecording}
             disabled={!canControlRecording || isFinalizing}
-            aria-label={isPaused ? "Resume session" : "Pause session"}
-            title={isPaused ? "Resume session" : "Pause session"}
-            className="grid size-[46px] shrink-0 place-items-center rounded-full border border-indigo-200 bg-white/90 text-indigo-700 shadow-[0_8px_22px_rgba(79,70,229,0.13)] transition duration-200 hover:-translate-y-0.5 hover:border-indigo-300 hover:bg-indigo-50 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200/70"
+            aria-label={isPaused ? t("session.hero.resume") : t("session.hero.pause")}
+            title={isPaused ? t("session.hero.resume") : t("session.hero.pause")}
+            className="grid size-[48px] place-items-center justify-self-center rounded-full border-2 border-slate-200 bg-white text-[#071ed2] shadow-[0_5px_15px_rgba(15,23,42,0.06)] transition duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-[0_8px_20px_rgba(30,64,175,0.12)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200/70 sm:size-[50px]"
           >
-            {isPaused ? <Play aria-hidden="true" size={20} fill="currentColor" /> : <Pause aria-hidden="true" size={20} fill="currentColor" />}
+            {isPaused ? <Play aria-hidden="true" size={19} fill="currentColor" strokeWidth={2.25} /> : <Pause aria-hidden="true" size={20} fill="currentColor" strokeWidth={2.25} />}
           </button>
 
-          <div className="relative grid size-[72px] place-items-center max-sm:size-16">
+          <div className="relative grid size-[118px] place-items-center sm:size-[132px]">
+            <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-full border-2 border-indigo-200/75 bg-white/30" />
+            <span aria-hidden="true" className="pointer-events-none absolute inset-[13px] rounded-full border border-[#7c8af7]/50 bg-white/70 shadow-[0_0_28px_rgba(99,102,241,0.18)] sm:inset-[15px]" />
             {isRecording && (
-              <>
-                <span className="pointer-events-none absolute -inset-3 rounded-full border border-indigo-300/45 animate-[ping_2.4s_ease-out_infinite] motion-reduce:animate-none" />
-                <span className="pointer-events-none absolute -inset-1.5 rounded-full bg-indigo-400/15" />
-              </>
+              <span className="pointer-events-none absolute inset-[4px] rounded-full border border-indigo-300/55 animate-[ping_2.5s_ease-out_infinite] motion-reduce:animate-none" />
             )}
             <button
               type="button"
@@ -97,9 +114,10 @@ export default function GCCSessionHero({
               disabled={isStarting || isFinalizing}
               aria-label={primaryLabel}
               title={primaryLabel}
-              className="relative grid size-[72px] place-items-center rounded-full bg-gradient-to-br from-[#7768ff] via-[#6254ee] to-[#4338ca] text-white shadow-[0_14px_34px_rgba(79,70,229,0.4)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(79,70,229,0.46)] active:translate-y-0 active:scale-95 disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0 max-sm:size-16 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/75 focus-visible:ring-offset-4"
+              className="relative grid size-[78px] place-items-center rounded-full border-[3px] border-white/90 bg-[radial-gradient(circle_at_48%_38%,#4e568c_0%,#222a57_43%,#101938_72%,#101a2f_100%)] text-white shadow-[inset_0_0_0_2px_rgba(129,140,248,0.5),inset_0_-14px_24px_rgba(52,211,153,0.16),0_8px_22px_rgba(30,41,91,0.28)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[inset_0_0_0_2px_rgba(129,140,248,0.62),inset_0_-14px_24px_rgba(52,211,153,0.2),0_12px_28px_rgba(30,41,91,0.34)] active:translate-y-0 active:scale-95 disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-300/75 focus-visible:ring-offset-4 sm:size-[88px]"
             >
-              <Mic aria-hidden="true" size={30} strokeWidth={2.1} className="max-sm:size-7" />
+              <Mic aria-hidden="true" size={35} strokeWidth={1.85} className="drop-shadow-sm sm:size-10" />
+              <span aria-hidden="true" className="absolute bottom-[13px] h-px w-8 rounded-full bg-emerald-200/75 shadow-[0_0_7px_rgba(167,243,208,.8)]" />
             </button>
           </div>
 
@@ -107,41 +125,34 @@ export default function GCCSessionHero({
             type="button"
             onClick={onStopRecording}
             disabled={!canControlRecording || isFinalizing}
-            aria-label="Stop and finalize session"
-            title="Stop and finalize session"
-            className="grid size-[46px] shrink-0 place-items-center rounded-full border border-rose-200 bg-rose-50/95 text-rose-600 shadow-[0_8px_22px_rgba(225,29,72,0.1)] transition duration-200 hover:-translate-y-0.5 hover:border-rose-300 hover:bg-rose-100 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-200/75"
+            aria-label={t("session.hero.stopFinalize")}
+            title={t("session.hero.stopFinalize")}
+            className="grid size-[48px] place-items-center justify-self-center rounded-full border border-[#1026d8] bg-[#071ed2] text-white shadow-[0_8px_20px_rgba(7,30,210,0.2)] transition duration-200 hover:-translate-y-0.5 hover:bg-[#0015bd] hover:shadow-[0_11px_24px_rgba(7,30,210,0.28)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-indigo-200/80 sm:size-[50px]"
           >
-            <Square aria-hidden="true" size={20} fill="currentColor" strokeWidth={1.8} />
+            <Square aria-hidden="true" size={20} strokeWidth={2.25} />
           </button>
         </div>
 
-        <p aria-live="polite" className="mt-3 min-h-5 text-center text-[13px] font-semibold leading-5 text-slate-600">
-          {getSessionMessage(status)}
+        <p aria-live="polite" className="mt-3 min-h-7 text-center text-[15px] font-normal leading-7 text-slate-500 sm:mt-4 sm:text-[16px]">
+          <SessionMessage status={status} />
         </p>
 
-        <div className="mt-2 flex w-full max-w-[660px] flex-col items-center gap-2 sm:flex-row sm:gap-4">
-          <div
-            aria-hidden="true"
-            className={`flex h-11 min-w-0 flex-1 items-center justify-between gap-1 rounded-full border px-3 sm:px-4 ${
-              isRecording ? "border-indigo-100 bg-white/70" : "border-slate-200/70 bg-white/45"
-            }`}
-          >
+        <div dir="ltr" className="mt-2 flex w-full max-w-[570px] items-center justify-center gap-4 sm:mt-3 sm:gap-5">
+          <div aria-hidden="true" className="flex h-[54px] min-w-0 flex-1 items-center justify-center gap-[3px] overflow-hidden sm:gap-1">
             {waveformBars.map((height, index) => (
               <i
                 key={`${height}-${index}`}
-                className={`w-0.5 shrink-0 rounded-full bg-gradient-to-t from-indigo-600 to-sky-400 transition-opacity duration-300 sm:w-[3px] ${
+                className={`w-[3px] shrink-0 rounded-full bg-[#071ed2] transition-[height,opacity] duration-300 ${
                   isRecording ? "gcc-wave-bar opacity-100" : isPaused ? "opacity-35" : "opacity-20"
                 }`}
-                style={{ height, animationDelay: `${index * 38}ms` }}
+                style={{ height, animationDelay: `${index * 34}ms` }}
               />
             ))}
           </div>
 
-          <time
-            aria-live="off"
-            className="inline-flex h-9 min-w-[84px] shrink-0 items-center justify-center rounded-full border border-slate-200/80 bg-white/80 px-3 font-mono text-[13px] font-bold tabular-nums text-slate-700 shadow-sm"
-          >
-            <span className="sr-only">Elapsed session time </span>
+          <time aria-live="off" className="inline-flex shrink-0 items-center gap-2 text-[18px] font-semibold tabular-nums text-[#071ed2] sm:text-[21px]">
+            <Timer aria-hidden="true" size={24} strokeWidth={1.9} />
+            <span className="sr-only">{t("session.hero.elapsedTime")} </span>
             {timer}
           </time>
         </div>

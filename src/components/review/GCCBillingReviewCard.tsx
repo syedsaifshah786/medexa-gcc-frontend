@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import GCCReviewCardFrame from "@/components/review/GCCReviewCardFrame";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
 import type { GCCBillingIntelligence, GCCBillingSessionItem } from "@/lib/gcc/session-api";
 
 type GCCBillingReviewCardProps = {
@@ -15,27 +16,39 @@ type EditableBillingItem = GCCBillingSessionItem & {
   id: string;
 };
 
+type BillingDraft = {
+  source: GCCBillingIntelligence | null;
+  isEditing: boolean;
+  items: EditableBillingItem[];
+};
+
+function createBillingDraft(source: GCCBillingIntelligence | null): BillingDraft {
+  return {
+    source,
+    isEditing: false,
+    items: (source?.session_items ?? []).map((item, index) => ({
+      ...item,
+      id: item.id ?? `${item.code || "session-item"}-${index}`,
+    })),
+  };
+}
+
 export default function GCCBillingReviewCard({ billingIntelligence, isLoading, errorMessage, onRetry }: GCCBillingReviewCardProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [items, setItems] = useState<EditableBillingItem[]>([]);
+  const { formatNumber, t } = useGCCLocale();
+  const [draft, setDraft] = useState<BillingDraft>(() => createBillingDraft(billingIntelligence));
+  const activeDraft = draft.source === billingIntelligence ? draft : createBillingDraft(billingIntelligence);
+  const { isEditing, items } = activeDraft;
   const hasData = Boolean(billingIntelligence);
 
-  useEffect(() => {
-    setIsEditing(false);
-    setItems(
-      (billingIntelligence?.session_items ?? []).map((item, index) => ({
-        ...item,
-        id: item.id ?? `${item.code || "session-item"}-${index}`,
-      })),
-    );
-  }, [billingIntelligence]);
-
   const updateItem = (id: string, field: keyof Pick<EditableBillingItem, "code" | "coding_system" | "status" | "description">, value: string) => {
-    setItems((currentItems) => currentItems.map((item) => (item.id === id ? { ...item, [field]: value } : item)));
+    setDraft({
+      ...activeDraft,
+      items: items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
+    });
   };
 
   return (
-    <GCCReviewCardFrame title="Encounter Coding" isEditing={isEditing} onEditToggle={() => setIsEditing((value) => !value)} minHeightClass="min-h-[690px]" editDisabled={!hasData}>
+    <GCCReviewCardFrame title={t("review.billing.cardTitle")} isEditing={isEditing} onEditToggle={() => setDraft({ ...activeDraft, isEditing: !isEditing })} minHeightClass="min-h-[690px]" editDisabled={!hasData}>
       {isLoading ? (
         <ReviewLoadingState />
       ) : errorMessage ? (
@@ -46,26 +59,26 @@ export default function GCCBillingReviewCard({ billingIntelligence, isLoading, e
         <div className="space-y-6">
           <section>
             <div className="flex items-center justify-between gap-4">
-              <h3 className="text-[18px] font-semibold text-[#080B3A]">Session items</h3>
+              <h3 className="text-[18px] font-semibold text-[#080B3A]">{t("review.billing.sessionItems")}</h3>
             </div>
 
             <div className="mt-4 space-y-3">
               {items.length > 0 ? (
                 items.map((item) => (
-                  <CodingItem key={item.id} item={item} isEditing={isEditing} onUpdate={updateItem} onDelete={() => setItems((currentItems) => currentItems.filter((code) => code.id !== item.id))} />
+                  <CodingItem key={item.id} item={item} isEditing={isEditing} onUpdate={updateItem} onDelete={() => setDraft({ ...activeDraft, items: items.filter((code) => code.id !== item.id) })} />
                 ))
               ) : (
-                <div className="rounded-[16px] border border-[#D8DDF2] bg-white/80 p-4 text-[15px] font-semibold text-[#697085]">No supported GCC coding recommendations were generated.</div>
+                <div className="rounded-[16px] border border-[#D8DDF2] bg-white/80 p-4 text-[15px] font-semibold text-[#697085]">{t("review.billing.noCoding")}</div>
               )}
             </div>
           </section>
 
           {(billingIntelligence.dx_support_confidence !== null || billingIntelligence.claims_readiness !== null) && (
             <section>
-              <h3 className="text-[18px] font-semibold text-[#080B3A]">Revenue Intelligence</h3>
+              <h3 className="text-[18px] font-semibold text-[#080B3A]">{t("review.billing.revenueIntelligence")}</h3>
               <div className="mt-4 space-y-4 rounded-[18px] border border-[#D8DDF2] bg-white/80 p-4">
-                {billingIntelligence.dx_support_confidence !== null && <ProgressRow label="DX Support Confidence" value={billingIntelligence.dx_support_confidence} tone="green" />}
-                {billingIntelligence.claims_readiness !== null && <ProgressRow label="Claims Readiness" value={billingIntelligence.claims_readiness} tone="blue" />}
+                {billingIntelligence.dx_support_confidence !== null && <ProgressRow label={t("review.billing.dxSupportConfidence")} value={billingIntelligence.dx_support_confidence} tone="green" />}
+                {billingIntelligence.claims_readiness !== null && <ProgressRow label={t("review.billing.claimsReadiness")} value={billingIntelligence.claims_readiness} tone="blue" />}
               </div>
             </section>
           )}
@@ -77,13 +90,17 @@ export default function GCCBillingReviewCard({ billingIntelligence, isLoading, e
                   <span className="grid size-9 place-items-center rounded-full bg-[#E45A5A]/12 text-[#E45A5A]">
                     <AlertIcon className="size-5" />
                   </span>
-                  <h3 className="text-[15px] font-semibold text-[#080B3A]">Active Denial Loop</h3>
+                  <h3 className="text-[15px] font-semibold text-[#080B3A]">{t("review.billing.activeDenialLoop")}</h3>
                 </div>
-                <p className="text-[14px] font-bold text-[#E45A5A]">{billingIntelligence.denial_items.length} Items</p>
+                <p className="text-[14px] font-bold text-[#E45A5A]">
+                  {t(getBillingItemCountKey(billingIntelligence.denial_items.length), {
+                    count: formatNumber(billingIntelligence.denial_items.length),
+                  })}
+                </p>
               </div>
               <div className="mt-3 space-y-2 text-[14px] font-medium text-[#212332]">
                 {billingIntelligence.denial_items.map((item, index) => (
-                  <p key={`denial-${index}`}>{item}</p>
+                  <p key={`denial-${index}`} dir="auto">{item}</p>
                 ))}
               </div>
             </section>
@@ -95,6 +112,8 @@ export default function GCCBillingReviewCard({ billingIntelligence, isLoading, e
 }
 
 function CodingItem({ item, isEditing, onUpdate, onDelete }: { item: EditableBillingItem; isEditing: boolean; onUpdate: (id: string, field: keyof Pick<EditableBillingItem, "code" | "coding_system" | "status" | "description">, value: string) => void; onDelete: () => void }) {
+  const { t } = useGCCLocale();
+
   return (
     <article className="rounded-[16px] border border-[#D8DDF2] bg-white p-4 shadow-[0_8px_22px_rgba(55,65,130,0.05)]">
       <div className="flex items-start justify-between gap-4">
@@ -102,28 +121,28 @@ function CodingItem({ item, isEditing, onUpdate, onDelete }: { item: EditableBil
           <div className="flex flex-wrap items-center gap-2">
             {item.code &&
               (isEditing ? (
-                <input value={item.code} onChange={(event) => onUpdate(item.id, "code", event.target.value)} className="h-8 w-24 rounded-full bg-[#080B3A] px-3 text-[13px] font-bold text-white outline-none" />
+                <input value={item.code} onChange={(event) => onUpdate(item.id, "code", event.target.value)} aria-label={t("review.billing.codeInputAria")} dir="ltr" className="h-8 w-24 rounded-full bg-[#080B3A] px-3 text-left text-[13px] font-bold text-white outline-none" />
               ) : (
-                <span className="rounded-full bg-[#080B3A] px-3 py-1.5 text-[13px] font-bold text-white">{item.code}</span>
+                <bdi dir="ltr" className="rounded-full bg-[#080B3A] px-3 py-1.5 text-[13px] font-bold text-white">{item.code}</bdi>
               ))}
             {item.coding_system &&
               (isEditing ? (
-                <input value={item.coding_system} onChange={(event) => onUpdate(item.id, "coding_system", event.target.value)} className="h-8 w-28 rounded-full border border-[#D8DDF2] bg-white px-3 text-[12px] font-semibold text-[#080B3A] outline-none" />
+                <input value={item.coding_system} onChange={(event) => onUpdate(item.id, "coding_system", event.target.value)} aria-label={t("review.billing.codingSystemInputAria")} dir="ltr" className="h-8 w-28 rounded-full border border-[#D8DDF2] bg-white px-3 text-left text-[12px] font-semibold text-[#080B3A] outline-none" />
               ) : (
-                <span className="rounded-full border border-[#D8DDF2] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#080B3A]">{item.coding_system}</span>
+                <bdi dir="ltr" className="rounded-full border border-[#D8DDF2] bg-white px-3 py-1.5 text-[12px] font-semibold text-[#080B3A]">{item.coding_system}</bdi>
               ))}
           </div>
           {isEditing ? (
-            <input value={item.description} onChange={(event) => onUpdate(item.id, "description", event.target.value)} className="mt-3 w-full rounded-[10px] border border-[#D8DDF2] bg-[#F8FBFF] px-3 py-2 text-[15px] font-medium text-[#212332] outline-none" />
+            <input value={item.description} onChange={(event) => onUpdate(item.id, "description", event.target.value)} aria-label={t("review.billing.descriptionInputAria")} dir="auto" className="mt-3 w-full rounded-[10px] border border-[#D8DDF2] bg-[#F8FBFF] px-3 py-2 text-[15px] font-medium text-[#212332] outline-none" />
           ) : (
-            item.description && <p className="mt-3 text-[15px] font-medium text-[#212332]">{item.description}</p>
+            item.description && <p dir="auto" className="mt-3 text-[15px] font-medium text-[#212332]">{item.description}</p>
           )}
-          {item.evidence && <p className="mt-3 rounded-[12px] bg-[#F8FBFF] px-3 py-2 text-[13px] font-medium leading-6 text-[#697085]">{item.evidence}</p>}
+          {item.evidence && <p dir="auto" className="mt-3 rounded-[12px] bg-[#F8FBFF] px-3 py-2 text-[13px] font-medium leading-6 text-[#697085]">{item.evidence}</p>}
         </div>
 
         <div className="flex shrink-0 items-center gap-3">
           {item.status && <StatusBadge item={item} isEditing={isEditing} onUpdate={onUpdate} />}
-          <button type="button" onClick={onDelete} aria-label={item.code ? `Delete ${item.code}` : "Delete coding item"} className="grid size-8 place-items-center rounded-full text-[#697085] transition hover:bg-[#FFF4F4] hover:text-[#E45A5A]">
+          <button type="button" onClick={onDelete} aria-label={item.code ? t("review.billing.deleteCodeAria", { code: item.code }) : t("review.billing.deleteItemAria")} className="grid size-8 place-items-center rounded-full text-[#697085] transition hover:bg-[#FFF4F4] hover:text-[#E45A5A]">
             <TrashIcon className="size-4" />
           </button>
         </div>
@@ -133,61 +152,105 @@ function CodingItem({ item, isEditing, onUpdate, onDelete }: { item: EditableBil
 }
 
 function StatusBadge({ item, isEditing, onUpdate }: { item: EditableBillingItem; isEditing: boolean; onUpdate: (id: string, field: keyof Pick<EditableBillingItem, "code" | "coding_system" | "status" | "description">, value: string) => void }) {
+  const { t } = useGCCLocale();
+
   return (
     <div className="flex items-center gap-2 text-[12px] font-bold text-[#1FC77A]">
       <CheckCircleIcon className="size-4" />
       {isEditing ? (
-        <input value={item.status} onChange={(event) => onUpdate(item.id, "status", event.target.value)} className="h-8 w-28 rounded-full border border-[#D8DDF2] px-3 text-[12px] font-semibold text-[#212332] outline-none" />
+        <input value={item.status} onChange={(event) => onUpdate(item.id, "status", event.target.value)} aria-label={t("review.billing.statusInputAria")} dir="auto" className="h-8 w-28 rounded-full border border-[#D8DDF2] px-3 text-[12px] font-semibold text-[#212332] outline-none" />
       ) : (
-        <span>{item.status}</span>
+        <span dir="auto">{translateBillingStatus(item.status, t)}</span>
       )}
     </div>
   );
 }
 
 function ProgressRow({ label, value, tone }: { label: string; value: number; tone: "green" | "blue" }) {
-  const safeValue = Math.max(0, Math.min(100, value));
+  const { formatPercent } = useGCCLocale();
+  const normalizedValue = Math.abs(value) > 1 ? value : value * 100;
+  const safeValue = Math.max(0, Math.min(100, normalizedValue));
+  const formattedValue = formatPercent(value);
+
   return (
-    <div>
+    <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={safeValue} aria-valuetext={formattedValue}>
       <div className="flex items-center justify-between text-[14px] font-semibold text-[#212332]">
         <span>{label}</span>
-        <span>{safeValue}%</span>
+        <span>{formattedValue}</span>
       </div>
       <div className="mt-2 h-2 rounded-full bg-[#EEF1FA]">
-        <span className={`block h-2 rounded-full ${tone === "green" ? "bg-[#1FC77A]" : "bg-gradient-to-r from-[#101BD8] to-[#5B61F6]"}`} style={{ width: `${safeValue}%` }} />
+        <span className={`block h-2 rounded-full ${tone === "green" ? "bg-[#1FC77A]" : "bg-gradient-to-r from-[#101BD8] to-[#5B61F6]"}`} style={{ width: `${safeValue}%`, marginInlineEnd: "auto" }} />
       </div>
     </div>
   );
 }
 
 function ReviewEmptyState() {
+  const { t } = useGCCLocale();
+
   return (
     <div className="rounded-[18px] border border-[#D8DDF2] bg-white/80 p-5">
-      <p className="text-[15px] font-semibold text-[#080B3A]">No completed session data is available yet.</p>
-      <p className="mt-2 text-[14px] font-medium text-[#697085]">Complete and stop a live session to generate this review.</p>
+      <p className="text-[15px] font-semibold text-[#080B3A]">{t("review.emptyTitle")}</p>
+      <p className="mt-2 text-[14px] font-medium text-[#697085]">{t("review.emptyBody")}</p>
     </div>
   );
 }
 
 function ReviewErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  const { t } = useGCCLocale();
+
   return (
     <div className="rounded-[18px] border border-[#F4B5B5] bg-[#FFF8F8] p-5">
       <p className="text-[15px] font-semibold text-[#080B3A]">{message}</p>
       <button type="button" onClick={onRetry} className="mt-4 h-9 rounded-full border border-[#AEB7F7] bg-white px-4 text-[13px] font-semibold text-[#101BD8] transition hover:border-[#5B61F6]">
-        Retry
+        {t("review.retry")}
       </button>
     </div>
   );
 }
 
 function ReviewLoadingState() {
+  const { t } = useGCCLocale();
+
   return (
-    <div className="space-y-4" aria-label="Loading session review data">
-      <div className="h-20 animate-pulse rounded-[16px] bg-[#EEF1FA]" />
-      <div className="h-28 animate-pulse rounded-[18px] bg-[#EEF1FA]" />
-      <div className="h-16 animate-pulse rounded-[16px] bg-[#EEF1FA]" />
+    <div className="space-y-4" role="status" aria-label={t("review.loadingAria")}>
+      <p className="text-[14px] font-semibold text-[#697085]">{t("review.loadingAria")}</p>
+      <div aria-hidden="true" className="h-20 animate-pulse rounded-[16px] bg-[#EEF1FA]" />
+      <div aria-hidden="true" className="h-28 animate-pulse rounded-[18px] bg-[#EEF1FA]" />
+      <div aria-hidden="true" className="h-16 animate-pulse rounded-[16px] bg-[#EEF1FA]" />
     </div>
   );
+}
+
+type Translate = ReturnType<typeof useGCCLocale>["t"];
+
+function translateBillingStatus(status: string, t: Translate) {
+  const normalizedStatus = status.trim().toLowerCase().replace(/[\s_-]+/g, " ");
+  const statusKey: Record<string, string> = {
+    supported: "review.billing.status.supported",
+    pending: "review.billing.status.pending",
+    verified: "review.billing.status.verified",
+    complete: "review.billing.status.complete",
+    completed: "review.billing.status.completed",
+    "requires clinician review": "review.billing.status.requiresReview",
+    "requires review": "review.billing.status.requiresReview",
+    suggested: "review.billing.status.suggested",
+    ready: "review.billing.status.ready",
+    cleared: "review.billing.status.cleared",
+    queued: "review.billing.status.queued",
+    active: "review.billing.status.active",
+    inactive: "review.billing.status.inactive",
+  };
+
+  const key = statusKey[normalizedStatus];
+  return key ? t(key) : status;
+}
+
+function getBillingItemCountKey(count: number) {
+  if (count === 1) return "review.billing.itemCountOne";
+  if (count === 2) return "review.billing.itemCountTwo";
+  if (count <= 10) return "review.billing.itemCountFew";
+  return "review.billing.itemCountMany";
 }
 
 function TrashIcon({ className }: { className?: string }) {

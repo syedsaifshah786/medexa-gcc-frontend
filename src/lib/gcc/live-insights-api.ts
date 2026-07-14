@@ -8,6 +8,7 @@ import type {
   GCCLiveSuggestionStatus,
   GCCLiveTranscriptSegment,
 } from "@/types/gcc-live-insights";
+import type { GCCLocale } from "@/i18n/types";
 
 const suggestionCategories = new Set<GCCLiveSuggestionCategory>([
   "protocol_question",
@@ -26,6 +27,7 @@ const nonAlphaNumericPattern = new RegExp("[^\\p{L}\\p{N}]+", "gu");
 type JsonRecord = Record<string, unknown>;
 
 export type GCCLiveInsightsRequestInput = {
+  locale: GCCLocale;
   sessionId: string;
   transcriptRevision: number;
   elapsedMs: number;
@@ -80,10 +82,10 @@ function normalizeFingerprintPart(value: string) {
 
 export function createGCCSuggestionFingerprint(
   category: GCCLiveSuggestionCategory,
-  title: string,
+  _title: string,
   evidence: string,
 ) {
-  return [category, normalizeFingerprintPart(title), normalizeFingerprintPart(evidence)].join("|");
+  return [category, normalizeFingerprintPart(evidence)].join("|");
 }
 
 function parseSuggestion(value: unknown, receivedAt: string): GCCLiveSuggestion {
@@ -114,8 +116,9 @@ function parseSuggestion(value: unknown, receivedAt: string): GCCLiveSuggestion 
   }
 
   const fallbackFingerprint = createGCCSuggestionFingerprint(category, title, evidence);
-  const fingerprint = readString(suggestion, "fingerprint") || fallbackFingerprint;
-  const id = readString(suggestion, "id") || fingerprint;
+  const suppliedId = readString(suggestion, "id");
+  const fingerprint = readString(suggestion, "fingerprint") || suppliedId || fallbackFingerprint;
+  const id = suppliedId || fingerprint;
   const rawConfidence = suggestion.confidence;
   const confidence =
     rawConfidence === null || rawConfidence === undefined
@@ -141,8 +144,19 @@ function parseSuggestion(value: unknown, receivedAt: string): GCCLiveSuggestion 
   };
 }
 
-export function parseGCCLiveInsightsResponse(value: unknown): GCCLiveInsightsResponse {
+export function parseGCCLiveInsightsResponse(
+  value: unknown,
+  expectedLanguage?: GCCLocale,
+): GCCLiveInsightsResponse {
   const response = requireRecord(value, "response");
+  const language = readString(response, "language") as GCCLocale;
+  const locale = readString(response, "locale") as "en-US" | "ar-SA";
+  if (
+    expectedLanguage &&
+    (language !== expectedLanguage || locale !== (expectedLanguage === "ar" ? "ar-SA" : "en-US"))
+  ) {
+    throw new Error("Live insights returned a mismatched language.");
+  }
   const sessionId = requireString(response, "sessionId", "session_id");
   const transcriptRevision = requireNonNegativeInteger(
     response.transcriptRevision ?? response.transcript_revision,
@@ -169,6 +183,8 @@ export function parseGCCLiveInsightsResponse(value: unknown): GCCLiveInsightsRes
   const summary = requireString(rawReadiness, "summary");
 
   return {
+    language: language || expectedLanguage || "en",
+    locale: locale || (expectedLanguage === "ar" ? "ar-SA" : "en-US"),
     sessionId,
     transcriptRevision,
     suggestions: [...suggestionsByFingerprint.values()],
@@ -204,6 +220,7 @@ function nullableTrimmedString(value: string | null | undefined) {
 }
 
 export async function requestGCCLiveInsights({
+  locale,
   sessionId,
   transcriptRevision,
   elapsedMs,
@@ -227,6 +244,8 @@ export async function requestGCCLiveInsights({
     signal,
     body: JSON.stringify({
       session_id: sessionId,
+      language: locale,
+      locale: locale === "ar" ? "ar-SA" : "en-US",
       transcript_revision: transcriptRevision,
       elapsed_ms: Math.max(0, Math.round(elapsedMs)),
       recent_transcript: recentTranscript,
@@ -250,5 +269,5 @@ export async function requestGCCLiveInsights({
     throw new Error("Live insights request failed.");
   }
 
-  return parseGCCLiveInsightsResponse(await response.json());
+  return parseGCCLiveInsightsResponse(await response.json(), locale);
 }

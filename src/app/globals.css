@@ -19,10 +19,22 @@
 }
 
 .gcc-session-workspace {
-  width: min(1240px, calc(100vw - 48px));
+  width: min(1280px, calc(100vw - 64px));
   max-width: 1280px;
   min-height: calc(100vh - var(--header-height));
   margin-inline: auto;
+}
+
+.gcc-prototype-dots {
+  background-image: radial-gradient(circle, rgba(78, 86, 164, 0.18) 1px, transparent 1.15px);
+  background-position: 0 0;
+  background-size: 7px 7px;
+}
+
+.gcc-prototype-dots-soft {
+  background-image: radial-gradient(circle, rgba(71, 85, 105, 0.13) 0.8px, transparent 1px);
+  background-position: center;
+  background-size: 8px 8px;
 }
 
 @theme inline {
@@ -32,6 +44,10 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html[data-gcc-locale="ar"][data-gcc-locale-ready="false"] body {
+  visibility: hidden;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -39,6 +55,26 @@ body {
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+}
+
+html[dir="rtl"] body,
+html[dir="rtl"] button,
+html[dir="rtl"] input,
+html[dir="rtl"] textarea,
+html[dir="rtl"] select {
+  font-family: var(--font-noto-sans-arabic), var(--font-geist-sans), Arial, sans-serif;
+}
+
+[dir="ltr"] .gcc-ltr,
+[dir="rtl"] .gcc-ltr {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.gcc-canonical-code {
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
 }
 
 * {
@@ -129,6 +165,36 @@ select:focus-visible,
   }
 }
 
+@keyframes gcc-panel-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(18px, 0, 0) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes gcc-backdrop-enter {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(7px);
+  }
+}
+
+.gcc-panel-enter {
+  animation: gcc-panel-enter 220ms cubic-bezier(0.2, 0.75, 0.2, 1) both;
+}
+
+.gcc-backdrop-enter {
+  animation: gcc-backdrop-enter 180ms ease-out both;
+}
+
 .gcc-live-suggestion {
   animation: gcc-suggestion-enter 260ms ease-out both;
 }
@@ -158,6 +224,11 @@ select:focus-visible,
   .gcc-live-suggestion {
     animation: none;
     transition: none;
+  }
+
+  .gcc-panel-enter,
+  .gcc-backdrop-enter {
+    animation: none;
   }
 }
 
@@ -243,6 +314,15 @@ html[dir="rtl"] input,
 html[dir="rtl"] textarea,
 html[dir="rtl"] select {
   text-align: right;
+}
+
+html[dir="rtl"] input[dir="ltr"],
+html[dir="rtl"] textarea[dir="ltr"],
+html[dir="rtl"] select[dir="ltr"],
+html[dir="rtl"] input.gcc-ltr,
+html[dir="rtl"] textarea.gcc-ltr,
+html[dir="rtl"] input.gcc-canonical-code {
+  text-align: left;
 }
 
 html[dir="rtl"] [dir="ltr"],

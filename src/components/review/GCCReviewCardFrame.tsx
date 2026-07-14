@@ -26,7 +26,7 @@ export default function GCCReviewCardFrame({ title, isEditing, onEditToggle, chi
         >
           <header className="flex items-center justify-between gap-4 border-b border-[#D8DDF2] pb-4">
             <h2 className="text-[22px] font-semibold leading-7 text-[#080B3A]">{title}</h2>
-            <GCCEditButton isEditing={isEditing} onClick={onEditToggle} disabled={editDisabled} />
+            <GCCEditButton isEditing={isEditing} onClick={onEditToggle} disabled={editDisabled} sectionTitle={title} />
           </header>
           <div className="flex-1 pt-6">{children}</div>
         </div>

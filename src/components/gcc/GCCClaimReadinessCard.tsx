@@ -1,62 +1,96 @@
+"use client";
+
 import { AlertTriangle, CheckCircle2, FileSearch } from "lucide-react";
+import SlideAction from "@/components/gcc/SlideAction";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
+import { GCC_LOCALE_TAGS } from "@/lib/i18n/formatters";
 import type { GCCClaimReadiness } from "@/types/gcc-live-insights";
 
-function readinessCopy(readiness: GCCClaimReadiness | null) {
-  if (!readiness) {
-    return "Claim quality is still being evaluated.";
-  }
+type Props = {
+  readiness: GCCClaimReadiness | null;
+  isAnalyzing?: boolean;
+  onImprove?: () => void;
+};
 
-  if (readiness.summary.trim()) {
-    return readiness.summary;
-  }
-
-  if (readiness.blockingIssues > 0) {
-    return `${readiness.blockingIssues} ${readiness.blockingIssues === 1 ? "issue" : "issues"} may impact claim approval.`;
-  }
-
-  if (readiness.warnings > 0) {
-    return `${readiness.warnings} ${readiness.warnings === 1 ? "item requires" : "items require"} clinician review.`;
-  }
-
-  return "No active documentation issues detected yet.";
-}
-
-export default function GCCClaimReadinessCard({ readiness, isAnalyzing = false }: { readiness: GCCClaimReadiness | null; isAnalyzing?: boolean }) {
+export default function GCCClaimReadinessCard({ readiness, isAnalyzing = false, onImprove }: Props) {
+  const { locale, t, formatNumber } = useGCCLocale();
   const hasBlockingIssues = Boolean(readiness?.blockingIssues);
   const hasWarnings = Boolean(readiness?.warnings);
-  const Icon = hasBlockingIssues || hasWarnings ? AlertTriangle : readiness ? CheckCircle2 : FileSearch;
+  const hasIssues = hasBlockingIssues || hasWarnings;
+  const Icon = hasIssues ? AlertTriangle : readiness ? CheckCircle2 : FileSearch;
+  const totalIssues = (readiness?.blockingIssues ?? 0) + (readiness?.warnings ?? 0);
+  const issuePlural = new Intl.PluralRules(GCC_LOCALE_TAGS[locale]).select(totalIssues);
+  const issuePluralForm = issuePlural === "one" || issuePlural === "two" ? issuePlural : "other";
+  const readinessMessage = !readiness
+    ? t("session.claimReadiness.evaluating")
+    : readiness.summary.trim()
+      ? readiness.summary
+      : totalIssues > 0
+        ? t(`session.claimReadiness.issues.${issuePluralForm}`, {
+            count: formatNumber(totalIssues),
+          })
+        : t("session.claimReadiness.noIssues");
 
   return (
     <aside
-      aria-label="Claim readiness"
-      className="relative overflow-hidden rounded-b-[18px] border-t border-indigo-950/20 bg-gradient-to-br from-[#171d3b] via-[#22234b] to-[#30275c] px-4 py-3.5 text-white shadow-[0_-8px_24px_rgba(15,23,42,0.08)]"
+      aria-label={t("session.claimReadiness.aria")}
+      className={`relative overflow-hidden rounded-[25px] border px-5 py-5 shadow-[0_14px_34px_rgba(15,23,42,0.15)] sm:px-8 sm:py-6 ${
+        hasIssues
+          ? "border-cyan-400/80 bg-[#090c3b] text-white ring-1 ring-lime-300/70"
+          : "border-emerald-200 bg-gradient-to-br from-emerald-50 to-white text-slate-900"
+      }`}
     >
-      <div className="pointer-events-none absolute -right-8 -top-12 size-28 rounded-full bg-indigo-400/20 blur-2xl" aria-hidden="true" />
-      <div className="relative flex items-start gap-3">
-        <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${hasBlockingIssues ? "bg-rose-400/15 text-rose-200" : hasWarnings ? "bg-amber-400/15 text-amber-200" : "bg-emerald-400/15 text-emerald-200"}`}>
-          <Icon className="size-[18px]" aria-hidden="true" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-[11px] font-extrabold uppercase tracking-[0.12em] text-indigo-100">Claim Readiness</h3>
-            {isAnalyzing && <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-indigo-200"><i className="size-1.5 animate-pulse rounded-full bg-indigo-300" />Analyzing</span>}
-          </div>
-          <p className="mt-1 text-[13px] font-semibold leading-5 text-white">{readinessCopy(readiness)}</p>
-          {readiness && (readiness.blockingIssues > 0 || readiness.warnings > 0) && (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {readiness.blockingIssues > 0 && (
-                <span className="rounded-full bg-rose-400/15 px-2 py-1 text-[10px] font-bold text-rose-100">
-                  {readiness.blockingIssues} blocking
-                </span>
-              )}
-              {readiness.warnings > 0 && (
-                <span className="rounded-full bg-amber-400/15 px-2 py-1 text-[10px] font-bold text-amber-100">
-                  {readiness.warnings} {readiness.warnings === 1 ? "warning" : "warnings"}
-                </span>
-              )}
-            </div>
+      <div className={`pointer-events-none absolute -end-10 -top-16 size-40 rounded-full blur-3xl ${hasIssues ? "bg-indigo-400/20" : "bg-emerald-200/45"}`} aria-hidden="true" />
+      <div className="relative">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h3 className={`inline-flex items-center gap-2 text-[16px] font-medium sm:text-[18px] ${hasIssues ? "text-white" : "text-slate-800"}`}>
+            <i className={`size-2 rounded-full ${hasBlockingIssues ? "bg-rose-400" : hasWarnings ? "bg-amber-400" : "bg-emerald-500"}`} aria-hidden="true" />
+            {t("session.claimReadiness.title")}
+          </h3>
+          {isAnalyzing && (
+            <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold ${hasIssues ? "text-indigo-200" : "text-emerald-700"}`}>
+              <i className="size-1.5 animate-pulse rounded-full bg-current" aria-hidden="true" />
+              {t("session.claimReadiness.analyzing")}
+            </span>
           )}
         </div>
+
+        <div className="mt-2 flex items-start gap-3">
+          <Icon className={`mt-1 size-[18px] shrink-0 ${hasBlockingIssues ? "text-rose-300" : hasWarnings ? "text-amber-300" : "text-emerald-600"}`} aria-hidden="true" />
+          <p dir="auto" className={`text-[15px] leading-6 sm:text-[17px] sm:leading-7 ${hasIssues ? "text-indigo-50" : "text-slate-600"}`}>{readinessMessage}</p>
+        </div>
+
+        {readiness && hasIssues && (
+          <div className="mt-3 flex flex-wrap gap-2 ps-[30px]">
+            {readiness.blockingIssues > 0 && (
+              <span className="rounded-full bg-rose-400/15 px-2.5 py-1 text-[10px] font-bold text-rose-100">
+                {t("session.claimReadiness.blocking", {
+                  count: formatNumber(readiness.blockingIssues),
+                })}
+              </span>
+            )}
+            {readiness.warnings > 0 && (
+              <span className="rounded-full bg-amber-400/15 px-2.5 py-1 text-[10px] font-bold text-amber-100">
+                {t(
+                  readiness.warnings === 1
+                    ? "session.claimReadiness.warning.one"
+                    : "session.claimReadiness.warning.other",
+                  { count: formatNumber(readiness.warnings) },
+                )}
+              </span>
+            )}
+          </div>
+        )}
+
+        {hasIssues && onImprove && (
+          <SlideAction
+            label={t("session.claimReadiness.slideImprove")}
+            completedLabel={t("session.claimReadiness.issueInView")}
+            variant="dark"
+            onComplete={onImprove}
+            className="mt-5 w-full max-w-[322px]"
+          />
+        )}
       </div>
     </aside>
   );

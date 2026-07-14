@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import GCCReviewBrand from "@/components/review/GCCReviewBrand";
+import GCCReviewLanguageSelector from "@/components/review/GCCReviewLanguageSelector";
 import GCCReviewStepIndicator from "@/components/review/GCCReviewStepIndicator";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
 
 type GCCReviewShellProps = {
   title: string;
@@ -14,6 +16,7 @@ type GCCReviewShellProps = {
 
 export default function GCCReviewShell({ title, subtitle, step, children }: GCCReviewShellProps) {
   const router = useRouter();
+  const { t } = useGCCLocale();
 
   return (
     <main
@@ -28,16 +31,20 @@ export default function GCCReviewShell({ title, subtitle, step, children }: GCCR
       <div className="mx-auto w-full max-w-[1180px]">
         <header className="flex items-start justify-between gap-4">
           <GCCReviewBrand />
-          <button
-            type="button"
-            onClick={() => router.push("/ambient-listening")}
-            aria-label="Close review and return to Ambient Listening"
-            className="grid size-11 place-items-center rounded-full border border-[#D8DDF2] bg-white/75 text-[#080B3A] shadow-[0_10px_28px_rgba(55,65,130,0.08)] transition hover:border-[#AEB7F7] hover:bg-white"
-          >
-            <svg viewBox="0 0 24 24" className="size-6" aria-hidden="true">
-              <path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-            </svg>
-          </button>
+          <div className="flex items-center gap-2.5">
+            <GCCReviewLanguageSelector />
+            <button
+              type="button"
+              onClick={() => router.push("/ambient-listening")}
+              aria-label={t("review.closeAria")}
+              title={t("review.closeAria")}
+              className="grid size-11 place-items-center rounded-full border border-[#D8DDF2] bg-white/75 text-[#080B3A] shadow-[0_10px_28px_rgba(55,65,130,0.08)] transition hover:border-[#AEB7F7] hover:bg-white focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#5B61F6]/20"
+            >
+              <svg viewBox="0 0 24 24" className="size-6" aria-hidden="true">
+                <path d="m7 7 10 10M17 7 7 17" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+              </svg>
+            </button>
+          </div>
         </header>
 
         <section className="mt-10 flex flex-col gap-5 md:flex-row md:items-end md:justify-between">

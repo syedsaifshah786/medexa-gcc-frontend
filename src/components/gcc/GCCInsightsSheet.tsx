@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Sparkles } from "lucide-react";
+import { CirclePause, Sparkles, WifiOff } from "lucide-react";
 import GCCClaimReadinessCard from "@/components/gcc/GCCClaimReadinessCard";
 import GCCSuggestionCard from "@/components/gcc/GCCSuggestionCard";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
+import { GCC_LOCALE_TAGS } from "@/lib/i18n/formatters";
 import type { GCCClaimReadiness, GCCLiveSuggestion } from "@/types/gcc-live-insights";
 
 export type GCCInsightsViewStatus = "idle" | "analyzing" | "updated" | "paused" | "unavailable";
@@ -18,14 +20,6 @@ type Props = {
   onIgnore: (fingerprint: string) => void;
 };
 
-function statusCopy(status: GCCInsightsViewStatus, lastUpdatedAt: number | null) {
-  if (status === "analyzing") return "Analyzing...";
-  if (status === "paused") return "Paused";
-  if (status === "unavailable") return "Live insights temporarily unavailable";
-  if (lastUpdatedAt) return "Updated just now";
-  return "Listening for transcript";
-}
-
 export default function GCCInsightsSheet({
   suggestions,
   claimReadiness,
@@ -35,7 +29,9 @@ export default function GCCInsightsSheet({
   onApprove,
   onIgnore,
 }: Props) {
+  const { locale, t, formatNumber } = useGCCLocale();
   const timersRef = useRef<number[]>([]);
+  const suggestionNodesRef = useRef(new Map<string, HTMLDivElement>());
   const [approvedFeedback, setApprovedFeedback] = useState<Set<string>>(() => new Set());
   const [ignoredExiting, setIgnoredExiting] = useState<Set<string>>(() => new Set());
   const activeSuggestions = useMemo(() => suggestions.filter((suggestion) => suggestion.status === "active"), [suggestions]);
@@ -43,13 +39,20 @@ export default function GCCInsightsSheet({
     () => suggestions.filter((suggestion) => suggestion.status === "active" || approvedFeedback.has(suggestion.fingerprint) || ignoredExiting.has(suggestion.fingerprint)),
     [approvedFeedback, ignoredExiting, suggestions],
   );
-
-  useEffect(
-    () => () => {
-      timersRef.current.forEach((timer) => window.clearTimeout(timer));
-    },
-    [],
+  const firstClaimIssue = useMemo(
+    () => activeSuggestions.find((suggestion) => suggestion.claimImpact !== "none") ?? null,
+    [activeSuggestions],
   );
+  const readinessInsertAfter = useMemo(() => {
+    if (!claimReadiness || visibleSuggestions.length === 0) return -1;
+    const firstClaimIndex = visibleSuggestions.findIndex((suggestion) => suggestion.claimImpact !== "none");
+    return firstClaimIndex >= 0 ? firstClaimIndex : Math.min(1, visibleSuggestions.length - 1);
+  }, [claimReadiness, visibleSuggestions]);
+
+  useEffect(() => {
+    const timers = timersRef.current;
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, []);
 
   const showApprovedFeedback = (fingerprint: string) => {
     setApprovedFeedback((current) => new Set(current).add(fingerprint));
@@ -77,62 +80,135 @@ export default function GCCInsightsSheet({
     timersRef.current.push(timer);
   };
 
+  const focusFirstClaimIssue = () => {
+    if (!firstClaimIssue) return;
+    const node = suggestionNodesRef.current.get(firstClaimIssue.fingerprint);
+    if (!node) return;
+    node.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => node.focus({ preventScroll: true }), 350);
+  };
+
+  const hasReadinessIssues = Boolean(claimReadiness && (claimReadiness.blockingIssues > 0 || claimReadiness.warnings > 0));
+  const StatusIcon = status === "unavailable" ? WifiOff : status === "paused" ? CirclePause : Sparkles;
+  const headline =
+    status === "paused"
+      ? t("session.insights.headline.paused")
+      : status === "unavailable"
+        ? t("session.insights.headline.unavailable")
+        : t("session.insights.headline.processing");
+  const statusLabel =
+    status === "analyzing"
+      ? t("session.insights.status.analyzing")
+      : status === "paused"
+        ? t("session.insights.status.paused")
+        : status === "unavailable"
+          ? t("session.insights.status.unavailable")
+          : lastUpdatedAt
+            ? t("session.insights.status.updated")
+            : t("session.insights.status.listening");
+  const suggestionPlural = new Intl.PluralRules(GCC_LOCALE_TAGS[locale]).select(activeSuggestions.length);
+  const suggestionCount = t(`session.insights.suggestionCount.${suggestionPlural}`, {
+    count: formatNumber(activeSuggestions.length),
+  });
+
   return (
-    <section
-      aria-labelledby="insights-title"
-      className="grid h-[clamp(360px,calc(100vh-330px),600px)] min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-[18px] border border-slate-200/80 bg-white/95 shadow-[0_16px_42px_rgba(37,48,93,0.08)]"
-    >
-      <header className="flex min-h-[68px] items-center justify-between gap-4 border-b border-slate-100 px-4 py-3 sm:px-5">
+    <section aria-labelledby="insights-title" className="mx-auto w-full max-w-[760px]">
+      <header className="mb-4 flex items-end justify-between gap-4 px-2 sm:px-7">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-indigo-50 text-indigo-600">
-              <Sparkles className="size-4" aria-hidden="true" />
-            </span>
-            <div className="min-w-0">
-              <h2 id="insights-title" className="truncate text-[15px] font-extrabold text-slate-900">Real-Time Suggestions</h2>
-              <p className={`mt-0.5 truncate text-[11px] font-semibold ${status === "unavailable" ? "text-amber-600" : status === "paused" ? "text-slate-400" : "text-indigo-500"}`} role="status" aria-live="polite">
-                {statusCopy(status, lastUpdatedAt)}
-              </p>
-            </div>
-          </div>
+          <h2 id="insights-title" className="truncate text-[15px] font-medium text-slate-500 sm:text-[18px]">
+            {headline}
+          </h2>
+          <p
+            className={`mt-1 inline-flex items-center gap-1.5 text-[10px] font-semibold sm:text-[11px] ${status === "unavailable" ? "text-amber-600" : "text-slate-400"}`}
+            role="status"
+            aria-live="polite"
+          >
+            <StatusIcon className={`size-3 ${status === "analyzing" ? "animate-pulse" : ""}`} aria-hidden="true" />
+            {statusLabel}
+          </p>
         </div>
-        <strong className="shrink-0 rounded-full bg-indigo-50 px-2.5 py-1.5 text-[11px] font-extrabold text-indigo-700">
-          {activeSuggestions.length} {activeSuggestions.length === 1 ? "Suggestion" : "Suggestions"}
-        </strong>
+        <p className="shrink-0 text-[15px] text-slate-600 sm:text-[18px]">
+          {suggestionCount}
+        </p>
       </header>
 
-      <div className="gcc-insights-scroll min-h-0 overflow-y-auto overscroll-contain bg-[linear-gradient(180deg,#fbfcff_0%,#f8fafc_100%)] px-3 py-3 sm:px-4" aria-live="polite">
-        {visibleSuggestions.length > 0 ? (
-          <div className="grid gap-3">
-            {visibleSuggestions.map((suggestion) => (
-              <GCCSuggestionCard
-                key={suggestion.fingerprint}
-                suggestion={suggestion}
-                onApprove={showApprovedFeedback}
-                onIgnore={smoothlyIgnore}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="grid h-full min-h-[180px] place-items-center px-5 text-center">
-            <div className="max-w-[340px]">
-              <span className="mx-auto grid size-11 place-items-center rounded-2xl bg-indigo-50 text-indigo-400">
-                <Sparkles className="size-5" aria-hidden="true" />
-              </span>
-              <h3 className="mt-3 text-sm font-extrabold text-slate-700">
-                {status === "analyzing" ? "Reviewing the latest transcript" : hasTranscript ? "No grounded suggestions detected yet" : "No live suggestions yet"}
-              </h3>
-              <p className="mt-1.5 text-[12px] leading-5 text-slate-500">
-                {hasTranscript
-                  ? "Existing insights will appear here only when supported by the conversation."
-                  : "Start speaking to receive transcript-grounded clinical workflow suggestions."}
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
+      <div className="rounded-[34px] bg-gradient-to-br from-cyan-300/70 via-indigo-300/65 to-lime-300/80 p-[2px] shadow-[0_22px_55px_rgba(36,58,120,0.10),0_0_30px_rgba(190,242,100,0.10)]">
+        <div className="relative overflow-hidden rounded-[32px] bg-white">
+          <div
+            className="pointer-events-none absolute inset-0 opacity-70"
+            aria-hidden="true"
+            style={{
+              backgroundImage: "radial-gradient(circle, rgba(99, 102, 241, 0.20) 1px, transparent 1.2px)",
+              backgroundPosition: "0 0",
+              backgroundSize: "8px 8px",
+            }}
+          />
+          <div className="pointer-events-none absolute inset-x-[12%] top-0 h-20 bg-gradient-to-b from-white via-white/75 to-transparent" aria-hidden="true" />
+          <div className="pointer-events-none absolute -bottom-16 left-[14%] size-48 rounded-full bg-lime-200/20 blur-3xl" aria-hidden="true" />
+          <div className="pointer-events-none absolute -bottom-20 right-[12%] size-52 rounded-full bg-cyan-200/20 blur-3xl" aria-hidden="true" />
 
-      <GCCClaimReadinessCard readiness={claimReadiness} isAnalyzing={status === "analyzing"} />
+          <span className="absolute left-1/2 top-5 z-10 h-2 w-[72px] -translate-x-1/2 rounded-full bg-slate-300/70 shadow-inner" aria-hidden="true" />
+
+          <div className="gcc-insights-scroll relative h-[clamp(430px,62vh,720px)] overflow-y-auto overscroll-contain px-3 pb-8 pt-16 sm:px-8 sm:pb-11 sm:pt-20" aria-live="polite">
+            {visibleSuggestions.length > 0 ? (
+              <div className="mx-auto grid max-w-[620px] gap-5 sm:gap-7">
+                {visibleSuggestions.map((suggestion, index) => (
+                  <div key={suggestion.fingerprint}>
+                    <div
+                      ref={(node) => {
+                        if (node) suggestionNodesRef.current.set(suggestion.fingerprint, node);
+                        else suggestionNodesRef.current.delete(suggestion.fingerprint);
+                      }}
+                      tabIndex={-1}
+                      className="relative ps-6 outline-none focus-visible:rounded-[24px] focus-visible:ring-2 focus-visible:ring-indigo-400 focus-visible:ring-offset-4 focus-visible:ring-offset-white sm:ps-14"
+                    >
+                      <span className="pointer-events-none absolute start-0 top-0 h-11 w-5 rounded-es-[20px] border-b-2 border-s-2 border-dashed border-indigo-300 sm:w-10" aria-hidden="true" />
+                      <GCCSuggestionCard suggestion={suggestion} onApprove={showApprovedFeedback} onIgnore={smoothlyIgnore} />
+                    </div>
+
+                    {claimReadiness && readinessInsertAfter === index && (
+                      <div className="relative mt-5 ps-6 sm:mt-7 sm:ps-14">
+                        <span className="pointer-events-none absolute start-0 top-0 h-11 w-5 rounded-es-[20px] border-b-2 border-s-2 border-dashed border-indigo-300 sm:w-10" aria-hidden="true" />
+                        <GCCClaimReadinessCard
+                          readiness={claimReadiness}
+                          isAnalyzing={status === "analyzing"}
+                          onImprove={firstClaimIssue ? focusFirstClaimIssue : undefined}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid h-full min-h-[300px] place-items-center px-5 text-center">
+                <div className="max-w-[360px] rounded-[24px] border border-white/90 bg-white/85 px-7 py-8 shadow-[0_16px_44px_rgba(50,62,110,0.08)] backdrop-blur-sm">
+                  <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-indigo-50 text-indigo-500 shadow-sm">
+                    <Sparkles className={`size-5 ${status === "analyzing" ? "animate-pulse" : ""}`} aria-hidden="true" />
+                  </span>
+                  <h3 className="mt-4 text-[15px] font-extrabold text-slate-800">
+                    {status === "analyzing"
+                      ? t("session.insights.empty.reviewing")
+                      : hasTranscript
+                        ? t("session.insights.empty.noGrounded")
+                        : t("session.insights.empty.noLive")}
+                  </h3>
+                  <p className="mt-2 text-[12px] leading-5 text-slate-500">
+                    {hasTranscript
+                      ? t("session.insights.empty.groundedHint")
+                      : t("session.insights.empty.startHint")}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {visibleSuggestions.length === 0 && claimReadiness && hasReadinessIssues && (
+              <div className="mx-auto mt-5 max-w-[540px]">
+                <GCCClaimReadinessCard readiness={claimReadiness} isAnalyzing={status === "analyzing"} />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

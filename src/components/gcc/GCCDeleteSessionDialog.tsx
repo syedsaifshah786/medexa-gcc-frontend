@@ -7,6 +7,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
 import type { GCCUpcomingSession } from "@/types/gcc-patient";
 
 type GCCDeleteSessionDialogProps = {
@@ -22,6 +23,7 @@ export default function GCCDeleteSessionDialog({
   onClose,
   onConfirm,
 }: GCCDeleteSessionDialogProps) {
+  const { t } = useGCCLocale();
   const dialogRef = useRef<HTMLDivElement>(null);
   const cancelButtonRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
@@ -144,13 +146,13 @@ export default function GCCDeleteSessionDialog({
           type="button"
           onClick={onClose}
           disabled={isDeleting}
-          aria-label="Close delete session dialog"
-          className="absolute right-4 top-4 grid size-8 place-items-center rounded-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label={t("ambient.deleteDialog.close")}
+          className="absolute end-4 top-4 grid size-8 place-items-center rounded-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <CloseIcon className="size-4" />
         </button>
 
-        <div className="flex items-start gap-3 px-5 py-5 pr-14">
+        <div className="flex items-start gap-3 px-5 py-5 pe-14">
           <span
             className="grid size-10 shrink-0 place-items-center rounded-full bg-rose-50 text-rose-600"
             aria-hidden="true"
@@ -162,14 +164,15 @@ export default function GCCDeleteSessionDialog({
               id={titleId}
               className="text-[18px] font-extrabold leading-6 text-slate-950"
             >
-              Delete Upcoming Session?
+              {t("ambient.deleteDialog.title")}
             </h2>
             <p
               id={descriptionId}
               className="mt-2 text-[13px] font-medium leading-5 text-slate-500"
             >
-              This will remove the upcoming session for {session.patientName}. This
-              action cannot be undone.
+              {t("ambient.deleteDialog.descriptionPrefix")}
+              <bdi dir="auto" className="whitespace-nowrap">{session.patientName}</bdi>
+              {t("ambient.deleteDialog.descriptionSuffix")}
             </p>
           </div>
         </div>
@@ -182,7 +185,7 @@ export default function GCCDeleteSessionDialog({
             disabled={isDeleting}
             className="inline-flex h-10 items-center justify-center rounded-[10px] border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Cancel
+            {t("ambient.deleteDialog.cancel")}
           </button>
           <button
             type="button"
@@ -191,7 +194,7 @@ export default function GCCDeleteSessionDialog({
             className="inline-flex h-10 items-center justify-center gap-2 rounded-[10px] bg-rose-600 px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(225,29,72,0.18)] transition hover:bg-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <TrashIcon className="size-4" />
-            Delete Session
+            {isDeleting ? t("ambient.deleteDialog.deleting") : t("ambient.deleteDialog.confirm")}
           </button>
         </footer>
       </div>

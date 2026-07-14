@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { Fragment, useEffect, useRef, type ReactNode } from "react";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
 import type { SessionStatus, TranscriptSegment } from "@/providers/GCCVoiceSessionProvider";
 
 type GCCTranscriptProps = {
@@ -8,25 +9,102 @@ type GCCTranscriptProps = {
   interimTranscript?: string;
   status?: SessionStatus;
   formatTimestamp?: (timestampMs: number) => string;
+  highlights?: string[];
+};
+
+type TranscriptLine = {
+  speaker: string;
+  text: string;
 };
 
 const nearBottomThreshold = 56;
+const speakerPrefixPattern = /^\s*([\p{L}][\p{L}\p{M} .'-]{0,38}):\s*(\S[\s\S]*)$/u;
 
-function getStatusPresentation(status: SessionStatus) {
+function getStatusKey(status: SessionStatus) {
   switch (status) {
     case "recording":
-      return { label: "Listening", dotClassName: "bg-emerald-500", badgeClassName: "border-emerald-100 bg-emerald-50 text-emerald-700" };
+      return "session.transcript.status.listening";
     case "paused":
-      return { label: "Paused", dotClassName: "bg-amber-500", badgeClassName: "border-amber-100 bg-amber-50 text-amber-700" };
+      return "session.transcript.status.paused";
     case "stopping":
-      return { label: "Finalizing", dotClassName: "bg-indigo-500", badgeClassName: "border-indigo-100 bg-indigo-50 text-indigo-700" };
+      return "session.transcript.status.finalizing";
     case "starting":
-      return { label: "Starting", dotClassName: "bg-sky-500", badgeClassName: "border-sky-100 bg-sky-50 text-sky-700" };
+      return "session.transcript.status.starting";
     case "stopped":
-      return { label: "Stopped", dotClassName: "bg-slate-400", badgeClassName: "border-slate-200 bg-slate-50 text-slate-600" };
+      return "session.transcript.status.stopped";
+    case "error":
+      return "session.transcript.status.unavailable";
     default:
-      return { label: "Ready", dotClassName: "bg-slate-400", badgeClassName: "border-slate-200 bg-slate-50 text-slate-600" };
+      return "session.transcript.status.ready";
   }
+}
+
+function parseTranscriptLine(value: string, fallbackSpeaker: string): TranscriptLine {
+  const text = value.trim();
+  const match = text.match(speakerPrefixPattern);
+
+  if (!match) {
+    return { speaker: fallbackSpeaker, text };
+  }
+
+  return { speaker: match[1].trim(), text: match[2].trim() };
+}
+
+function HighlightedText({ text, highlights }: { text: string; highlights: string[] }) {
+  const candidates = Array.from(new Set(highlights.map((highlight) => highlight.trim()).filter(Boolean))).sort(
+    (left, right) => right.length - left.length,
+  );
+
+  if (!text || candidates.length === 0) return text;
+
+  const lowerText = text.toLocaleLowerCase();
+  const occupied = new Uint8Array(text.length);
+  const ranges: Array<{ start: number; end: number }> = [];
+
+  for (const candidate of candidates) {
+    const lowerCandidate = candidate.toLocaleLowerCase();
+    let searchFrom = 0;
+
+    while (searchFrom < text.length) {
+      const start = lowerText.indexOf(lowerCandidate, searchFrom);
+      if (start === -1) break;
+
+      const end = start + candidate.length;
+      let overlaps = false;
+      for (let index = start; index < end; index += 1) {
+        if (occupied[index]) {
+          overlaps = true;
+          break;
+        }
+      }
+
+      if (!overlaps) {
+        ranges.push({ start, end });
+        occupied.fill(1, start, end);
+      }
+
+      searchFrom = Math.max(end, start + 1);
+    }
+  }
+
+  if (ranges.length === 0) return text;
+
+  ranges.sort((left, right) => left.start - right.start);
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+
+  for (const range of ranges) {
+    if (range.start > cursor) parts.push(text.slice(cursor, range.start));
+    parts.push(
+      <mark key={`${range.start}-${range.end}`} className="rounded-[2px] bg-[#343653] px-1 py-0.5 text-white decoration-clone box-decoration-clone">
+        {text.slice(range.start, range.end)}
+      </mark>,
+    );
+    cursor = range.end;
+  }
+
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <Fragment>{parts}</Fragment>;
 }
 
 export default function GCCTranscript({
@@ -34,12 +112,13 @@ export default function GCCTranscript({
   interimTranscript = "",
   status = "idle",
   formatTimestamp,
+  highlights = [],
 }: GCCTranscriptProps) {
+  const { t } = useGCCLocale();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const shouldFollowRef = useRef(true);
   const finalizedSegments = segments.filter((segment) => segment.isFinal);
   const hasTranscript = finalizedSegments.length > 0 || Boolean(interimTranscript.trim());
-  const statusPresentation = getStatusPresentation(status);
 
   useEffect(() => {
     if (!shouldFollowRef.current) return;
@@ -56,59 +135,62 @@ export default function GCCTranscript({
   return (
     <section
       aria-labelledby="live-transcription-title"
-      className="flex h-[clamp(360px,calc(100vh-330px),600px)] min-h-0 w-full flex-col overflow-hidden rounded-[20px] border border-slate-200/80 bg-white/95 shadow-[0_14px_38px_rgba(30,41,59,0.08)]"
+      className={`mx-auto flex min-h-0 w-full max-w-[680px] flex-col ${
+        hasTranscript ? "h-[clamp(210px,29vh,330px)]" : "h-[clamp(120px,17vh,180px)]"
+      }`}
     >
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-100 px-4 py-3.5 sm:px-5">
-        <div className="min-w-0">
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-indigo-500">Conversation</p>
-          <h2 id="live-transcription-title" className="mt-0.5 truncate text-[16px] font-extrabold text-slate-900">
-            Live Transcription
-          </h2>
-        </div>
-        <span
-          aria-live="polite"
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold ${statusPresentation.badgeClassName}`}
-        >
-          <i aria-hidden="true" className={`size-1.5 rounded-full ${statusPresentation.dotClassName}`} />
-          {statusPresentation.label}
-        </span>
-      </header>
+      <h2 id="live-transcription-title" className="sr-only">
+        {t("session.transcript.title")}
+      </h2>
+      <p aria-live="polite" className="sr-only">
+        {t("session.transcript.status", { status: t(getStatusKey(status)) })}
+      </p>
 
       <div
         ref={scrollAreaRef}
-        aria-label="Live conversation transcript"
+        aria-label={t("session.transcript.conversation")}
         onScroll={(event) => {
           const scrollArea = event.currentTarget;
           const distanceFromBottom = scrollArea.scrollHeight - scrollArea.scrollTop - scrollArea.clientHeight;
           shouldFollowRef.current = distanceFromBottom <= nearBottomThreshold;
         }}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5"
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-3 [scrollbar-gutter:stable] sm:px-3"
       >
         {hasTranscript ? (
-          <div className="space-y-4">
-            <div role="log" aria-live="polite" aria-relevant="additions" className="space-y-4">
-              {finalizedSegments.map((segment) => (
-                <article key={segment.id} className="grid grid-cols-[48px_minmax(0,1fr)] items-start gap-3">
-                  <time className="pt-0.5 font-mono text-[10px] font-medium tabular-nums text-slate-400">
+          <div role="log" aria-live="polite" aria-relevant="additions" className="space-y-5 sm:space-y-6">
+            {finalizedSegments.map((segment) => {
+              const line = parseTranscriptLine(segment.text, t("session.transcript.speaker.session"));
+              return (
+                <article key={segment.id} className="grid grid-cols-[48px_minmax(0,1fr)] items-start gap-3 sm:grid-cols-[54px_minmax(0,1fr)] sm:gap-4">
+                  <time dir="ltr" className="pt-0.5 text-[12px] font-normal tabular-nums text-slate-400 sm:text-[13px]">
                     {formatTimestamp?.(segment.timestampMs) ?? ""}
                   </time>
-                  <p className="text-[14px] leading-6 text-slate-800">{segment.text}</p>
+                  <p className="min-w-0 text-[15px] leading-[1.45] text-slate-700 sm:text-[16px]">
+                    <strong className="font-medium text-slate-600"><bdi>{line.speaker}</bdi>:</strong>{" "}
+                    <span dir="auto"><HighlightedText text={line.text} highlights={highlights} /></span>
+                  </p>
                 </article>
-              ))}
-            </div>
+              );
+            })}
 
-            {interimTranscript.trim() && (
-              <div aria-live="off" className="grid grid-cols-[48px_minmax(0,1fr)] items-start gap-3" data-interim-transcript>
-                <time className="pt-0.5 font-mono text-[10px] font-medium text-slate-300">now</time>
-                <p className="text-[14px] italic leading-6 text-slate-400">{interimTranscript.trim()}</p>
-              </div>
-            )}
+            {interimTranscript.trim() && (() => {
+              const line = parseTranscriptLine(interimTranscript, t("session.transcript.speaker.live"));
+              return (
+                <div aria-live="off" className="grid grid-cols-[48px_minmax(0,1fr)] items-start gap-3 sm:grid-cols-[54px_minmax(0,1fr)] sm:gap-4" data-interim-transcript>
+                  <time dir="ltr" className="pt-0.5 text-[12px] font-normal tabular-nums text-slate-300 sm:text-[13px]">{t("session.transcript.now")}</time>
+                  <p className="min-w-0 text-[15px] italic leading-[1.45] text-slate-400 sm:text-[16px]">
+                    <strong className="font-medium not-italic text-slate-500"><bdi>{line.speaker}</bdi>:</strong>{" "}
+                    <span dir="auto"><HighlightedText text={line.text} highlights={highlights} /></span>
+                  </p>
+                </div>
+              );
+            })()}
           </div>
         ) : (
-          <div className="grid min-h-full place-items-center px-5 py-10 text-center">
+          <div className="grid min-h-full place-items-center px-5 py-8 text-center">
             <div>
-              <span aria-hidden="true" className="mx-auto mb-3 block size-2 rounded-full bg-indigo-300 shadow-[0_0_0_7px_rgba(165,180,252,0.18)]" />
-              <p className="text-[14px] font-semibold text-slate-500">Start speaking to see the live transcript.</p>
+              <span aria-hidden="true" className="mx-auto mb-3 block size-2 rounded-full bg-indigo-300 shadow-[0_0_0_7px_rgba(165,180,252,0.16)]" />
+              <p className="text-[14px] font-medium text-slate-400">{t("session.transcript.empty")}</p>
             </div>
           </div>
         )}

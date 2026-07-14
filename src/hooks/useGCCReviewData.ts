@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
 import {
   fetchGCCReviewBundle,
   readReviewBundleFromCache,
@@ -48,6 +49,7 @@ function applyBundle(bundle: GCCReviewBundle | null) {
 
 export function useGCCReviewData(): GCCReviewData {
   const searchParams = useSearchParams();
+  const { locale, t } = useGCCLocale();
   const sessionId = searchParams.get("sessionId");
   const [status, setStatus] = useState<ReviewDataStatus>("idle");
   const [bundle, setBundle] = useState<GCCReviewBundle | null>(null);
@@ -59,33 +61,42 @@ export function useGCCReviewData(): GCCReviewData {
   }, []);
 
   useEffect(() => {
+    let isMounted = true;
+
     if (!sessionId) {
-      setBundle(null);
-      setError(null);
-      setStatus("waiting-for-session");
-      return;
+      queueMicrotask(() => {
+        if (!isMounted) return;
+        setBundle(null);
+        setError(null);
+        setStatus("waiting-for-session");
+      });
+      return () => {
+        isMounted = false;
+      };
     }
 
-    let isMounted = true;
-    const cachedBundle = readReviewBundleFromCache(sessionId);
-    if (cachedBundle) {
-      setBundle(cachedBundle);
-      setStatus("ready");
-      setError(null);
-    } else {
-      setBundle(null);
-      setStatus("loading");
-      setError(null);
-    }
+    const cachedBundle = readReviewBundleFromCache(sessionId, locale);
+    queueMicrotask(() => {
+      if (!isMounted) return;
+      if (cachedBundle) {
+        setBundle(cachedBundle);
+        setStatus("ready");
+        setError(null);
+      } else {
+        setBundle(null);
+        setStatus("loading");
+        setError(null);
+      }
+    });
 
     const loadBundle = async () => {
       try {
-        const remoteBundle = await fetchGCCReviewBundle(sessionId);
+        const remoteBundle = await fetchGCCReviewBundle(sessionId, locale);
         if (!isMounted) return;
 
         if (remoteBundle) {
           setBundle(remoteBundle);
-          saveReviewBundleLocally(remoteBundle);
+          saveReviewBundleLocally(remoteBundle, locale);
           setStatus("ready");
           setError(null);
           return;
@@ -99,7 +110,7 @@ export function useGCCReviewData(): GCCReviewData {
       } catch {
         if (!isMounted) return;
         setStatus(cachedBundle ? "ready" : "error");
-        setError(cachedBundle ? null : "Session review data could not be loaded.");
+        setError(cachedBundle ? null : t("review.error.load"));
       }
     };
 
@@ -107,13 +118,20 @@ export function useGCCReviewData(): GCCReviewData {
     return () => {
       isMounted = false;
     };
-  }, [refreshNonce, sessionId]);
+  }, [locale, refreshNonce, sessionId, t]);
 
-  const mappedBundle = useMemo(() => applyBundle(bundle), [bundle]);
+  const currentBundle =
+    bundle?.sessionId === sessionId && bundle.locale === locale ? bundle : null;
+  const mappedBundle = useMemo(() => applyBundle(currentBundle), [currentBundle]);
+  const currentStatus = !sessionId
+    ? "waiting-for-session"
+    : status === "ready" && !currentBundle
+      ? "loading"
+      : status;
 
   return {
     sessionId,
-    status,
+    status: currentStatus,
     soapNote: mappedBundle.soapNote,
     billingIntelligence: mappedBundle.billingIntelligence,
     patientSummary: mappedBundle.patientSummary,

@@ -1,4 +1,10 @@
+"use client";
+
+import { useGCCLocale } from "@/hooks/useGCCLocale";
+
 export default function GCCReviewBrand() {
+  const { t } = useGCCLocale();
+
   return (
     <div className="flex items-center gap-3">
       <span className="relative grid size-9 place-items-center text-[#101BD8]" aria-hidden="true">
@@ -7,7 +13,7 @@ export default function GCCReviewBrand() {
       </span>
       <div className="leading-none">
         <p className="text-[25px] font-bold leading-[26px] text-[#101BD8]">Medexa</p>
-        <p className="mt-0.5 text-[15px] font-medium leading-[17px] text-[#212332]">Review Assistant</p>
+        <p className="mt-0.5 text-[15px] font-medium leading-[17px] text-[#212332]">{t("review.brandAssistant")}</p>
       </div>
     </div>
   );

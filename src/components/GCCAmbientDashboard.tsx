@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import GCCHeader from "@/components/gcc/GCCHeader";
 import GCCPatientSessionModal from "@/components/gcc/GCCAddPatientModal";
 import GCCDeleteSessionDialog from "@/components/gcc/GCCDeleteSessionDialog";
+import { useSelectedDoctor } from "@/components/DoctorContext";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
 import { useGCCVoiceSession } from "@/hooks/useGCCVoiceSession";
 import { loadUpcomingSessions, saveUpcomingSessions } from "@/lib/gcc/upcoming-session-storage";
 import type { GCCUpcomingSession } from "@/types/gcc-patient";
@@ -106,44 +108,69 @@ const dashboardSessions: GCCUpcomingSession[] = [
 ];
 
 const metrics = [
-  { label: "Eligibility Verification", value: "98%" },
-  { label: "Pre-Auth Success", value: "92%" },
-  { label: "Claim Quality Score", value: "95%" },
+  { labelKey: "ambient.metric.eligibilityVerification", value: 98 },
+  { labelKey: "ambient.metric.preAuthSuccess", value: 92 },
+  { labelKey: "ambient.metric.claimQualityScore", value: 95 },
 ];
 
 const dueActionItems = [
-  { title: "Missing Pre-Authorization", date: "July 05", detail: "Sarah J", context: "Cardiac Rehab", tone: "warning" as const },
-  { title: "Coding Review Required", date: "July 05", detail: "Ahmad K", context: "Pri Care Encounter", tone: "warning" as const },
-  { title: "Documentation Pending (>24h)", date: "July 05", detail: "Fatima S", context: "Specialist Consult", tone: "success" as const },
-  { title: "Claim Validation Needed", date: "July 05", detail: "John D", context: "Post-Op Rec", tone: "warning" as const },
+  {
+    titleKey: "ambient.due.missingPreAuthorization",
+    date: "2026-07-05",
+    detail: "Sarah J",
+    contextKey: "ambient.due.cardiacRehab",
+    tone: "warning" as const,
+  },
+  {
+    titleKey: "ambient.due.codingReviewRequired",
+    date: "2026-07-05",
+    detail: "Ahmad K",
+    contextKey: "ambient.due.primaryCareEncounter",
+    tone: "warning" as const,
+  },
+  {
+    titleKey: "ambient.due.documentationPending",
+    date: "2026-07-05",
+    detail: "Fatima S",
+    contextKey: "ambient.due.specialistConsult",
+    tone: "success" as const,
+  },
+  {
+    titleKey: "ambient.due.claimValidationNeeded",
+    date: "2026-07-05",
+    detail: "John D",
+    contextKey: "ambient.due.postOpRecovery",
+    tone: "warning" as const,
+  },
 ];
 
+const statusTranslationKeys: Record<GCCUpcomingSession["status"], string> = {
+  Active: "ambient.status.active",
+  Upcoming: "ambient.status.upcoming",
+  "Pre-Auth Required": "ambient.status.preAuthRequired",
+  "Auth Pending": "ambient.status.authPending",
+  Completed: "ambient.status.completed",
+};
+
+const nphiesTranslationKeys: Record<GCCUpcomingSession["nphiesStatus"], string> = {
+  Pending: "ambient.nphies.pending",
+  Cleared: "ambient.nphies.cleared",
+  Queued: "ambient.nphies.queued",
+  Inactive: "ambient.nphies.inactive",
+  Verified: "ambient.nphies.verified",
+};
+
 const cx = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ");
-const storageErrorMessage = "Unable to save upcoming sessions. Please try again.";
 
 type DashboardToast = {
-  message: string;
+  messageKey: string;
   tone: "success" | "error";
 };
 
-function formatSessionDateTime(sessionDate: string, sessionTime: string) {
-  if (!sessionDate || !sessionTime) {
-    return "";
-  }
-
-  const dateTime = new Date(`${sessionDate}T${sessionTime}`);
-  if (Number.isNaN(dateTime.getTime())) {
-    return "";
-  }
-
-  const date = dateTime.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const time = dateTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-
-  return `${date} \u2022 ${time}`;
-}
-
 export default function GCCAmbientDashboard() {
   const router = useRouter();
+  const { t, formatDate } = useGCCLocale();
+  const { selectedDoctor } = useSelectedDoctor();
   const {
     permissionStatus,
     status: voiceStatus,
@@ -159,7 +186,27 @@ export default function GCCAmbientDashboard() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [toast, setToast] = useState<DashboardToast | null>(null);
 
-  const currentDate = "Tuesday, Jul 13, 2026";
+  const now = new Date();
+  const riyadhHour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      hour: "2-digit",
+      hourCycle: "h23",
+      timeZone: "Asia/Riyadh",
+    }).format(now),
+  );
+  const greetingKey = riyadhHour < 12
+    ? "ambient.greeting.goodMorning"
+    : riyadhHour < 18
+      ? "ambient.greeting.goodAfternoon"
+      : "ambient.greeting.goodEvening";
+  const clinicianName = selectedDoctor.name.replace(/^Dr\.?\s*/i, "");
+  const currentDate = formatDate(now, {
+    weekday: "long",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "Asia/Riyadh",
+  });
 
   useEffect(() => {
     // Browser storage is intentionally hydrated only after the server-rendered view mounts.
@@ -215,23 +262,23 @@ export default function GCCAmbientDashboard() {
         );
 
         if (!saveUpcomingSessions(nextSessions)) {
-          setToast({ message: storageErrorMessage, tone: "error" });
+          setToast({ messageKey: "ambient.toast.saveError", tone: "error" });
           return false;
         }
 
         setUpcomingSessions(nextSessions);
-        setToast({ message: "Upcoming session updated successfully", tone: "success" });
+        setToast({ messageKey: "ambient.toast.updated", tone: "success" });
         return true;
       }
 
       const nextSessions = [submittedSession, ...upcomingSessions.filter((session) => session.id !== submittedSession.id)];
       if (!saveUpcomingSessions(nextSessions)) {
-        setToast({ message: storageErrorMessage, tone: "error" });
+        setToast({ messageKey: "ambient.toast.saveError", tone: "error" });
         return false;
       }
 
       setUpcomingSessions(nextSessions);
-      setToast({ message: "Patient added to Upcoming Sessions", tone: "success" });
+      setToast({ messageKey: "ambient.toast.added", tone: "success" });
       return true;
     },
     [editingSession, upcomingSessions],
@@ -258,14 +305,14 @@ export default function GCCAmbientDashboard() {
     const nextSessions = upcomingSessions.filter((session) => session.id !== sessionToDelete.id);
     if (!saveUpcomingSessions(nextSessions)) {
       setIsDeleting(false);
-      setToast({ message: storageErrorMessage, tone: "error" });
+      setToast({ messageKey: "ambient.toast.saveError", tone: "error" });
       return;
     }
 
     setUpcomingSessions(nextSessions);
     setSessionToDelete(null);
     setIsDeleting(false);
-    setToast({ message: "Upcoming session deleted", tone: "success" });
+    setToast({ messageKey: "ambient.toast.deleted", tone: "success" });
   }, [isDeleting, sessionToDelete, upcomingSessions]);
 
   const startNewSession = async () => {
@@ -281,10 +328,12 @@ export default function GCCAmbientDashboard() {
         <div className="grid w-full grid-cols-1 items-start gap-y-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.85fr)] lg:gap-x-7 xl:gap-x-9">
           <div className="min-w-0">
             <section>
-              <p className="mb-1 text-[23px] font-normal leading-7 text-[#171717]">Good Evening,</p>
+              <p className="mb-1 text-[23px] font-normal leading-7 text-[#171717]">{t(greetingKey)}</p>
               <div className="flex flex-col items-start sm:flex-row sm:items-end">
-                <h1 className="text-[42px] font-light leading-[46px] tracking-[-1px] text-[#101010] sm:text-[50px] sm:leading-[54px]">Dr. Sarah</h1>
-                <p className="mt-1 text-[15px] font-medium leading-5 text-zinc-500 sm:mb-[5px] sm:ml-4 sm:mt-0 sm:text-[16px] sm:leading-[21px]">
+                <h1 className="text-[42px] font-light leading-[46px] tracking-[-1px] text-[#101010] sm:text-[50px] sm:leading-[54px]">
+                  {t("ambient.greeting.doctorPrefix")} <bdi dir="auto">{clinicianName}</bdi>
+                </h1>
+                <p className="mt-1 text-[15px] font-medium leading-5 text-zinc-500 sm:mb-[5px] sm:ms-4 sm:mt-0 sm:text-[16px] sm:leading-[21px]">
                   {currentDate}
                 </p>
               </div>
@@ -331,11 +380,11 @@ export default function GCCAmbientDashboard() {
             role="status"
             aria-live="polite"
             className={cx(
-              "fixed bottom-5 right-5 z-[150] rounded-[12px] border px-4 py-3 text-sm font-bold shadow-[0_18px_45px_rgba(15,23,42,0.14)]",
+              "fixed bottom-5 end-5 z-[150] rounded-[12px] border px-4 py-3 text-sm font-bold shadow-[0_18px_45px_rgba(15,23,42,0.14)]",
               toast.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700",
             )}
           >
-            {toast.message}
+            {t(toast.messageKey)}
           </div>
         )}
       </main>
@@ -344,12 +393,14 @@ export default function GCCAmbientDashboard() {
 }
 
 function NewSessionCallout({ onStartSession }: { onStartSession: () => void }) {
+  const { t } = useGCCLocale();
+
   return (
     <button
       type="button"
       onClick={onStartSession}
-      className="group relative isolate mb-7 mt-[22px] block h-auto w-full cursor-pointer overflow-visible rounded-[20px] bg-[linear-gradient(135deg,#55d6ff_0%,#79a8ff_34%,#c9b4ff_58%,#77f0b2_100%)] p-[2px] text-left shadow-[0_8px_24px_rgba(88,120,255,0.1),0_0_24px_rgba(85,214,255,0.12),0_0_18px_rgba(119,240,178,0.1)] transition hover:-translate-y-px active:translate-y-0 sm:h-24 sm:rounded-[24px]"
-      aria-label="Start a new Medexa session"
+      className="group relative isolate mb-7 mt-[22px] block h-auto w-full cursor-pointer overflow-visible rounded-[20px] bg-[linear-gradient(135deg,#55d6ff_0%,#79a8ff_34%,#c9b4ff_58%,#77f0b2_100%)] p-[2px] text-start shadow-[0_8px_24px_rgba(88,120,255,0.1),0_0_24px_rgba(85,214,255,0.12),0_0_18px_rgba(119,240,178,0.1)] transition hover:-translate-y-px active:translate-y-0 sm:h-24 sm:rounded-[24px]"
+      aria-label={t("ambient.hero.startAria")}
     >
       <span className="pointer-events-none absolute -inset-2 -z-10 rounded-[26px] bg-[linear-gradient(135deg,rgba(85,214,255,0.22),rgba(121,168,255,0.14),rgba(201,180,255,0.18),rgba(119,240,178,0.18))] opacity-70 blur-[18px] transition group-hover:opacity-80 sm:rounded-[30px]" aria-hidden="true" />
       <span
@@ -360,13 +411,17 @@ function NewSessionCallout({ onStartSession }: { onStartSession: () => void }) {
           backgroundSize: "12px 12px, 100% 100%, 100% 100%, 100% 100%",
         }}
       >
-        <span className="pointer-events-none absolute -bottom-7 -left-5 size-20 rounded-full bg-cyan-300/14 blur-xl" aria-hidden="true" />
+        <span className="pointer-events-none absolute -bottom-7 -start-5 size-20 rounded-full bg-cyan-300/14 blur-xl" aria-hidden="true" />
         <span className="relative grid size-9 shrink-0 place-items-center text-cyan-400 drop-shadow-[0_0_9px_rgba(34,211,238,0.38)]">
           <SparklesIcon className="size-8 text-cyan-400" />
         </span>
         <span className="relative min-w-0">
-          <span className="mb-1 block text-[20px] font-bold leading-[24px] text-[#171717] sm:text-[21px] sm:leading-[25px]">Starting a new session?</span>
-          <span className="block text-[14px] font-normal leading-5 text-[#666b78] sm:whitespace-nowrap sm:text-[15px]">Say &quot;Hey Medexa, start session with David Peter&quot;</span>
+          <span className="mb-1 block text-[20px] font-bold leading-[24px] text-[#171717] sm:text-[21px] sm:leading-[25px]">{t("ambient.hero.title")}</span>
+          <span className="block text-[14px] font-normal leading-5 text-[#666b78] sm:whitespace-nowrap sm:text-[15px]">
+            {t("ambient.hero.voicePromptPrefix")}
+            <bdi dir="auto">David Peter</bdi>
+            {t("ambient.hero.voicePromptSuffix")}
+          </span>
         </span>
       </span>
     </button>
@@ -384,16 +439,18 @@ function VoiceControlStatus({
   errorMessage: string | null;
   onEnable: () => void;
 }) {
+  const { locale, t } = useGCCLocale();
+
   if (permissionStatus === "granted" && voiceStatus === "command-listening") {
-    return <p className="mt-3 text-[12px] font-medium text-emerald-600">Voice control ready</p>;
+    return <p className="mt-3 text-[12px] font-medium text-emerald-600">{t("ambient.voice.ready")}</p>;
   }
 
   if (permissionStatus === "denied") {
-    return <p className="mt-3 text-[12px] font-medium text-rose-600">Microphone permission is required for Medexa voice commands.</p>;
+    return <p className="mt-3 text-[12px] font-medium text-rose-600">{t("ambient.voice.permissionRequired")}</p>;
   }
 
   if (errorMessage) {
-    return <p className="mt-3 text-[12px] font-medium text-amber-600">{errorMessage}</p>;
+    return <p className="mt-3 text-[12px] font-medium text-amber-600">{locale === "en" ? errorMessage : t("ambient.voice.unavailable")}</p>;
   }
 
   return (
@@ -402,12 +459,13 @@ function VoiceControlStatus({
       onClick={onEnable}
       className="mt-3 inline-flex h-8 items-center rounded-full border border-indigo-200 bg-white px-3 text-[12px] font-medium text-indigo-700 shadow-[0_4px_12px_rgba(15,23,42,0.04)] transition hover:border-indigo-300"
     >
-      Enable Voice Control
+      {t("ambient.voice.enable")}
     </button>
   );
 }
 
 function DashboardActionButtons({ onAddPatient, onStartSession, className }: { onAddPatient: () => void; onStartSession: () => void; className?: string }) {
+  const { t } = useGCCLocale();
   const buttonClass =
     "inline-flex h-[38px] items-center gap-2 rounded-[19px] border border-indigo-300/60 bg-white px-3.5 text-[13px] font-medium text-slate-800 shadow-[0_4px_12px_rgba(15,23,42,0.05)] transition hover:-translate-y-px hover:border-indigo-400";
 
@@ -415,29 +473,32 @@ function DashboardActionButtons({ onAddPatient, onStartSession, className }: { o
     <div className={cx("flex flex-wrap items-center gap-2", className)}>
       <button type="button" onClick={onAddPatient} className={buttonClass}>
         <UserPlusIcon className="size-3.5 text-indigo-500" />
-        Add new Patient
+        {t("ambient.actions.addPatient")}
       </button>
       <button type="button" onClick={onStartSession} className={buttonClass}>
         <SparklesIcon className="size-3.5 text-indigo-500" />
-        Start new Session
+        {t("ambient.actions.startSession")}
       </button>
     </div>
   );
 }
 
 function OperationalHealth() {
+  const { t, formatNumber, formatPercent } = useGCCLocale();
+
   return (
     <section>
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="mb-[5px] text-[15px] font-normal leading-5 text-[#737373]">Operational Health Score</h2>
+          <h2 className="mb-[5px] text-[15px] font-normal leading-5 text-[#737373]">{t("ambient.operational.title")}</h2>
           <div className="flex items-end gap-2.5">
             <span className="text-[38px] font-bold leading-[42px] tracking-[-1px] text-slate-950">
-              94.8<span className="ml-1 align-super text-[14px] font-medium tracking-normal text-slate-400">%</span>
+              {formatNumber(94.8)}
+              <span className="ms-1 align-super text-[14px] font-medium tracking-normal text-slate-400">{t("ambient.operational.percentSymbol")}</span>
             </span>
             <span className="mb-2 inline-flex h-[22px] items-center gap-1 rounded-full bg-emerald-50 px-2 text-[11px] font-semibold text-emerald-700">
               <ArrowUpIcon className="size-3" />
-              2.4%
+              {t("ambient.operational.percentValue", { value: formatNumber(2.4) })}
             </span>
           </div>
         </div>
@@ -445,7 +506,7 @@ function OperationalHealth() {
 
       <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-3">
         {metrics.map((metric) => (
-          <MetricCard key={metric.label} label={metric.label} value={metric.value} />
+          <MetricCard key={metric.labelKey} label={t(metric.labelKey)} value={formatPercent(metric.value)} />
         ))}
       </div>
     </section>
@@ -465,45 +526,63 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 }
 
 function DueActionItems() {
+  const { t, formatNumber } = useGCCLocale();
+
   return (
     <section className="mt-6 overflow-hidden rounded-[12px] border border-slate-200 bg-white shadow-[0_7px_18px_rgba(15,23,42,0.04)]">
       <div className="flex h-12 items-center justify-between gap-3 px-4">
         <div className="flex items-center gap-2">
-          <h2 className="text-[14px] font-semibold leading-[18px] text-slate-950">Your Due Action Items</h2>
-          <span className="grid size-[21px] place-items-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-700">7</span>
+          <h2 className="text-[14px] font-semibold leading-[18px] text-slate-950">{t("ambient.due.title")}</h2>
+          <span className="grid size-[21px] place-items-center rounded-full bg-amber-100 text-[10px] font-bold text-amber-700">{formatNumber(7)}</span>
         </div>
-        <button type="button" aria-label="Due action menu" className="grid size-7 place-items-center rounded-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">
+        <button type="button" aria-label={t("ambient.due.menu")} className="grid size-7 place-items-center rounded-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">
           <MoreHorizontalIcon className="size-4" />
         </button>
       </div>
 
       <div>
         {dueActionItems.map((item) => (
-          <ActionItem key={item.title} {...item} />
+          <ActionItem key={item.titleKey} {...item} />
         ))}
       </div>
 
       <button type="button" className="m-2 h-9 w-[calc(100%-16px)] rounded-[7px] bg-indigo-50 text-[13px] font-semibold text-indigo-700 transition hover:bg-indigo-100">
-        See All Due Actions
+        {t("ambient.due.seeAll")}
       </button>
     </section>
   );
 }
 
-function ActionItem({ title, date, detail, context, tone }: { title: string; date: string; detail: string; context: string; tone: "warning" | "success" }) {
+function ActionItem({
+  titleKey,
+  date,
+  detail,
+  contextKey,
+  tone,
+}: {
+  titleKey: string;
+  date: string;
+  detail: string;
+  contextKey: string;
+  tone: "warning" | "success";
+}) {
+  const { direction, t, formatDate } = useGCCLocale();
+  const title = t(titleKey);
+
   return (
     <article className="flex min-h-[66px] items-center border-t border-[#eceef4] px-3.5 py-2.5">
-      <span className={cx("mr-3 h-8 w-1.5 shrink-0 rounded-[6px]", tone === "warning" ? "bg-amber-400" : "bg-emerald-500")} />
+      <span className={cx("me-3 h-8 w-1.5 shrink-0 rounded-[6px]", tone === "warning" ? "bg-amber-400" : "bg-emerald-500")} />
       <div className="min-w-0 flex-1">
         <h3 className="truncate text-[13px] font-medium leading-[17px] text-slate-900">{title}</h3>
         <p className="mt-[3px] truncate text-[11px] font-medium leading-[15px] text-[#707783]">
-          {date} <span className="px-1 text-slate-300">&bull;</span> {detail} <span className="px-1 text-slate-300">&bull;</span> {context}
+          {formatDate(date, { month: "long", day: "2-digit", year: undefined })} <span className="px-1 text-slate-300">&bull;</span> <bdi dir="auto">{detail}</bdi>{" "}
+          <span className="px-1 text-slate-300">&bull;</span> {t(contextKey)}
         </p>
       </div>
-      <button type="button" aria-label={`${title} menu`} className="grid size-7 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">
+      <button type="button" aria-label={t("ambient.due.itemMenu", { title })} className="grid size-7 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">
         <MoreHorizontalIcon className="size-4" />
       </button>
-      <ChevronRightIcon className="size-4 shrink-0 text-slate-300" />
+      <ChevronRightIcon className={cx("size-4 shrink-0 text-slate-300", direction === "rtl" && "rotate-180")} />
     </article>
   );
 }
@@ -517,6 +596,7 @@ function UpcomingSessions({
   onEdit: (session: GCCUpcomingSession) => void;
   onDelete: (session: GCCUpcomingSession) => void;
 }) {
+  const { direction, t, formatNumber } = useGCCLocale();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const closeMenu = useCallback(() => setOpenMenuId(null), []);
 
@@ -525,14 +605,19 @@ function UpcomingSessions({
       <div className="w-full">
         <div className="flex w-full items-center justify-between">
           <h2 id="gcc-upcoming-sessions-heading" tabIndex={-1} className="text-[18px] font-medium leading-[23px] text-slate-950">
-            Upcoming Sessions
+            {t("ambient.upcoming.title")}
           </h2>
-          <ArrowRightIcon className="size-5 text-slate-700" />
+          <ArrowRightIcon className={cx("size-5 text-slate-700", direction === "rtl" && "rotate-180")} />
         </div>
-        <p className="mt-[3px] text-[12px] font-medium leading-4 text-zinc-400">19 sessions remaining ahead</p>
+        <p className="mt-[3px] text-[12px] font-medium leading-4 text-zinc-400">{t("ambient.upcoming.remaining", { count: formatNumber(19) })}</p>
       </div>
 
       <div className="mt-4 flex flex-col gap-2.5">
+        {sessions.length === 0 && (
+          <p className="rounded-[12px] border border-slate-200 bg-white px-4 py-6 text-center text-sm font-medium text-slate-500">
+            {t("ambient.upcoming.empty")}
+          </p>
+        )}
         {sessions.map((session) => (
           <SessionCard
             key={session.id}
@@ -564,8 +649,12 @@ function SessionCard({
   onEdit: (session: GCCUpcomingSession) => void;
   onDelete: (session: GCCUpcomingSession) => void;
 }) {
+  const { direction, t, formatDate, formatTime } = useGCCLocale();
   const statusTone = getStatusTone(session.status);
-  const sessionDateTime = formatSessionDateTime(session.sessionDate, session.sessionTime);
+  const dateTime = session.sessionDate && session.sessionTime ? new Date(`${session.sessionDate}T${session.sessionTime}`) : null;
+  const sessionDateTime = dateTime && !Number.isNaN(dateTime.getTime())
+    ? `${formatDate(dateTime, { month: "short", day: "numeric", year: undefined })} \u2022 ${formatTime(dateTime, { hour: "2-digit", minute: "2-digit" })}`
+    : "";
   const menuId = useId();
   const triggerId = `${menuId}-trigger`;
   const actionsRef = useRef<HTMLDivElement>(null);
@@ -674,12 +763,12 @@ function SessionCard({
       ) : (
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700 ring-2 ring-white">{session.initials}</span>
       )}
-      <div className="min-w-0 flex-1 pr-7">
+      <div className="min-w-0 flex-1 pe-7">
         <div>
-          <h3 className="truncate text-[16px] font-semibold leading-5 text-slate-950">{session.patientName}</h3>
+          <h3 className="truncate text-[16px] font-semibold leading-5 text-slate-950" dir="auto">{session.patientName}</h3>
           <p className="mt-1 flex min-w-0 items-center gap-x-1.5 overflow-hidden text-[12px] font-medium leading-4 text-slate-500">
             <span className={cx("size-1.5 shrink-0 rounded-full", statusTone.dot)} />
-            <span className="shrink-0">{session.status}</span>
+            <span className="shrink-0">{t(statusTranslationKeys[session.status])}</span>
             {sessionDateTime && (
               <>
                 <span className="shrink-0 text-slate-300" aria-hidden="true">
@@ -693,16 +782,20 @@ function SessionCard({
         <div className="mt-2.5 space-y-[5px]">
           <p className="flex items-center gap-1.5 text-[12px] font-medium leading-4 text-slate-500">
             <span className={cx("size-[7px] rounded-full", getNphiesDotTone(session.nphiesStatus))} />
-            NPHIES: <span className={getNphiesTone(session.nphiesStatus)}>{session.nphiesStatus}</span>
+            {t("ambient.upcoming.nphies")}: <span className={getNphiesTone(session.nphiesStatus)}>{t(nphiesTranslationKeys[session.nphiesStatus])}</span>
           </p>
-          {session.referenceId && <p className="text-[11px] font-medium leading-[15px] text-slate-500">Ref ID: {session.referenceId}</p>}
+          {session.referenceId && (
+            <p className="text-[11px] font-medium leading-[15px] text-slate-500">
+              {t("ambient.upcoming.referenceId")}: <bdi dir="ltr">{session.referenceId}</bdi>
+            </p>
+          )}
         </div>
       </div>
-      <ChevronRightIcon className="size-4 shrink-0 text-slate-300" />
+      <ChevronRightIcon className={cx("size-4 shrink-0 text-slate-300", direction === "rtl" && "rotate-180")} />
 
       <div
         ref={actionsRef}
-        className="absolute right-8 top-2.5 z-[70]"
+        className="absolute end-8 top-2.5 z-[70]"
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
@@ -717,7 +810,7 @@ function SessionCard({
           ref={triggerRef}
           id={triggerId}
           type="button"
-          aria-label={`Actions for ${session.patientName}`}
+          aria-label={t("ambient.upcoming.actionsFor", { patientName: session.patientName })}
           aria-haspopup="menu"
           aria-expanded={isMenuOpen}
           aria-controls={isMenuOpen ? menuId : undefined}
@@ -735,25 +828,25 @@ function SessionCard({
             role="menu"
             aria-labelledby={triggerId}
             onKeyDown={handleMenuKeyDown}
-            className="absolute right-0 top-[calc(100%+6px)] z-[80] w-44 overflow-hidden rounded-[11px] border border-slate-200 bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.16)]"
+            className="absolute end-0 top-[calc(100%+6px)] z-[80] w-44 overflow-hidden rounded-[11px] border border-slate-200 bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.16)]"
           >
             <button
               type="button"
               role="menuitem"
               onClick={handleEdit}
-              className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] font-semibold text-[#080B3A] transition hover:bg-slate-50"
+              className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-start text-[13px] font-semibold text-[#080B3A] transition hover:bg-slate-50"
             >
               <PencilIcon className="size-4" />
-              Edit Session
+              {t("ambient.upcoming.edit")}
             </button>
             <button
               type="button"
               role="menuitem"
               onClick={handleDelete}
-              className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] font-semibold text-rose-600 transition hover:bg-rose-50"
+              className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-start text-[13px] font-semibold text-rose-600 transition hover:bg-rose-50"
             >
               <TrashIcon className="size-4" />
-              Delete Session
+              {t("ambient.upcoming.delete")}
             </button>
           </div>
         )}

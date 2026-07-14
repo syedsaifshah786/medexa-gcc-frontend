@@ -36,6 +36,12 @@ export function validateUpcomingSession(value: unknown): value is GCCUpcomingSes
     typeof session.patientName === "string" &&
     typeof session.initials === "string" &&
     (session.avatarUrl === undefined || typeof session.avatarUrl === "string") &&
+    (session.dateOfBirth === undefined || typeof session.dateOfBirth === "string") &&
+    (session.consentCapturedAt === undefined || typeof session.consentCapturedAt === "string") &&
+    (session.consentMethod === undefined ||
+      session.consentMethod === "drawn-signature" ||
+      session.consentMethod === "typed-name") &&
+    (session.consentSignerName === undefined || typeof session.consentSignerName === "string") &&
     typeof session.sessionType === "string" &&
     typeof session.sessionDate === "string" &&
     typeof session.sessionTime === "string" &&
