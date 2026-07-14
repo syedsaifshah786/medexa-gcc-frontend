@@ -1,18 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import GCCHeader from "@/components/gcc/GCCHeader";
-import GCCAddPatientModal from "@/components/gcc/GCCAddPatientModal";
+import GCCPatientSessionModal from "@/components/gcc/GCCAddPatientModal";
+import GCCDeleteSessionDialog from "@/components/gcc/GCCDeleteSessionDialog";
 import { useGCCVoiceSession } from "@/hooks/useGCCVoiceSession";
+import { loadUpcomingSessions, saveUpcomingSessions } from "@/lib/gcc/upcoming-session-storage";
 import type { GCCUpcomingSession } from "@/types/gcc-patient";
 
 /* eslint-disable @next/next/no-img-element -- Prototype dashboard uses static mocked patient avatars. */
-
-const CUSTOM_SESSIONS_STORAGE_KEY = "medexa_gcc_custom_upcoming_sessions";
-
-const sessionStatuses: GCCUpcomingSession["status"][] = ["Active", "Upcoming", "Pre-Auth Required", "Auth Pending", "Completed"];
-const nphiesStatuses: GCCUpcomingSession["nphiesStatus"][] = ["Cleared", "Queued", "Pending", "Inactive", "Verified"];
 
 const dashboardSessions: GCCUpcomingSession[] = [
   {
@@ -122,55 +119,12 @@ const dueActionItems = [
 ];
 
 const cx = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ");
+const storageErrorMessage = "Unable to save upcoming sessions. Please try again.";
 
-function isGCCUpcomingSession(value: unknown): value is GCCUpcomingSession {
-  if (!value || typeof value !== "object") {
-    return false;
-  }
-
-  const session = value as Record<string, unknown>;
-
-  return (
-    typeof session.id === "string" &&
-    typeof session.patientName === "string" &&
-    typeof session.initials === "string" &&
-    (session.avatarUrl === undefined || typeof session.avatarUrl === "string") &&
-    typeof session.sessionType === "string" &&
-    typeof session.sessionDate === "string" &&
-    typeof session.sessionTime === "string" &&
-    sessionStatuses.includes(session.status as GCCUpcomingSession["status"]) &&
-    nphiesStatuses.includes(session.nphiesStatus as GCCUpcomingSession["nphiesStatus"]) &&
-    typeof session.referenceId === "string" &&
-    typeof session.createdAt === "string"
-  );
-}
-
-function loadCustomSessions() {
-  try {
-    const savedValue = window.localStorage.getItem(CUSTOM_SESSIONS_STORAGE_KEY);
-    if (!savedValue) {
-      return [];
-    }
-
-    const parsedValue: unknown = JSON.parse(savedValue);
-    if (!Array.isArray(parsedValue)) {
-      return [];
-    }
-
-    const seenIds = new Set(dashboardSessions.map((session) => session.id));
-
-    return parsedValue.filter(isGCCUpcomingSession).filter((session) => {
-      if (seenIds.has(session.id)) {
-        return false;
-      }
-
-      seenIds.add(session.id);
-      return true;
-    });
-  } catch {
-    return [];
-  }
-}
+type DashboardToast = {
+  message: string;
+  tone: "success" | "error";
+};
 
 function formatSessionDateTime(sessionDate: string, sessionTime: string) {
   if (!sessionDate || !sessionTime) {
@@ -198,17 +152,19 @@ export default function GCCAmbientDashboard() {
     startAmbientCommandListening,
     startSession,
   } = useGCCVoiceSession();
-  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
-  const [customSessions, setCustomSessions] = useState<GCCUpcomingSession[]>([]);
-  const [toast, setToast] = useState("");
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+  const [editingSession, setEditingSession] = useState<GCCUpcomingSession | null>(null);
+  const [upcomingSessions, setUpcomingSessions] = useState<GCCUpcomingSession[]>(dashboardSessions);
+  const [sessionToDelete, setSessionToDelete] = useState<GCCUpcomingSession | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [toast, setToast] = useState<DashboardToast | null>(null);
 
-  const sessions = useMemo(() => [...customSessions, ...dashboardSessions], [customSessions]);
   const currentDate = "Tuesday, Jul 13, 2026";
 
   useEffect(() => {
     // Browser storage is intentionally hydrated only after the server-rendered view mounts.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCustomSessions(loadCustomSessions());
+    setUpcomingSessions(loadUpcomingSessions(dashboardSessions));
   }, []);
 
   useEffect(() => {
@@ -216,7 +172,7 @@ export default function GCCAmbientDashboard() {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => setToast(""), 2500);
+    const timeoutId = window.setTimeout(() => setToast(null), 2500);
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
@@ -226,25 +182,91 @@ export default function GCCAmbientDashboard() {
     }
   }, [permissionStatus, startAmbientCommandListening]);
 
-  const openAddPatient = useCallback(() => setIsAddPatientOpen(true), []);
-  const closeAddPatient = useCallback(() => setIsAddPatientOpen(false), []);
+  const openAddPatient = useCallback(() => {
+    setEditingSession(null);
+    setIsPatientModalOpen(true);
+  }, []);
 
-  const addPatient = useCallback(
-    (newSession: GCCUpcomingSession) => {
-      const nextCustomSessions = [newSession, ...customSessions.filter((session) => session.id !== newSession.id)];
+  const openEditSession = useCallback((session: GCCUpcomingSession) => {
+    setEditingSession(session);
+    setIsPatientModalOpen(true);
+  }, []);
 
-      setCustomSessions(nextCustomSessions);
-      try {
-        window.localStorage.setItem(CUSTOM_SESSIONS_STORAGE_KEY, JSON.stringify(nextCustomSessions));
-      } catch {
-        // Keep the in-memory prototype usable when browser storage is unavailable.
+  const closePatientModal = useCallback(() => {
+    setIsPatientModalOpen(false);
+    setEditingSession(null);
+  }, []);
+
+  const submitPatientSession = useCallback(
+    (submittedSession: GCCUpcomingSession) => {
+      if (editingSession) {
+        const updatedAt = new Date().toISOString();
+        const nextSessions = upcomingSessions.map((session) =>
+          session.id === editingSession.id
+            ? {
+                ...session,
+                ...submittedSession,
+                id: session.id,
+                referenceId: session.referenceId,
+                createdAt: session.createdAt,
+                updatedAt,
+              }
+            : session,
+        );
+
+        if (!saveUpcomingSessions(nextSessions)) {
+          setToast({ message: storageErrorMessage, tone: "error" });
+          return false;
+        }
+
+        setUpcomingSessions(nextSessions);
+        setToast({ message: "Upcoming session updated successfully", tone: "success" });
+        return true;
       }
 
-      setIsAddPatientOpen(false);
-      setToast("Patient added to Upcoming Sessions");
+      const nextSessions = [submittedSession, ...upcomingSessions.filter((session) => session.id !== submittedSession.id)];
+      if (!saveUpcomingSessions(nextSessions)) {
+        setToast({ message: storageErrorMessage, tone: "error" });
+        return false;
+      }
+
+      setUpcomingSessions(nextSessions);
+      setToast({ message: "Patient added to Upcoming Sessions", tone: "success" });
+      return true;
     },
-    [customSessions],
+    [editingSession, upcomingSessions],
   );
+
+  const requestDeleteSession = useCallback((session: GCCUpcomingSession) => {
+    setSessionToDelete(session);
+  }, []);
+
+  const closeDeleteDialog = useCallback(() => {
+    if (!isDeleting) {
+      setSessionToDelete(null);
+    }
+  }, [isDeleting]);
+
+  const confirmDeleteSession = useCallback(async () => {
+    if (!sessionToDelete || isDeleting) {
+      return;
+    }
+
+    setIsDeleting(true);
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+
+    const nextSessions = upcomingSessions.filter((session) => session.id !== sessionToDelete.id);
+    if (!saveUpcomingSessions(nextSessions)) {
+      setIsDeleting(false);
+      setToast({ message: storageErrorMessage, tone: "error" });
+      return;
+    }
+
+    setUpcomingSessions(nextSessions);
+    setSessionToDelete(null);
+    setIsDeleting(false);
+    setToast({ message: "Upcoming session deleted", tone: "success" });
+  }, [isDeleting, sessionToDelete, upcomingSessions]);
 
   const startNewSession = async () => {
     const id = await startSession({ source: "manual" });
@@ -285,15 +307,35 @@ export default function GCCAmbientDashboard() {
 
           <div className="w-full min-w-0">
             <DashboardActionButtons onAddPatient={openAddPatient} onStartSession={startNewSession} className="mb-6 hidden lg:flex lg:justify-end" />
-            <UpcomingSessions sessions={sessions} />
+            <UpcomingSessions sessions={upcomingSessions} onEdit={openEditSession} onDelete={requestDeleteSession} />
           </div>
         </div>
 
-        {isAddPatientOpen && <GCCAddPatientModal onClose={closeAddPatient} onAddPatient={addPatient} />}
+        <GCCPatientSessionModal
+          mode={editingSession ? "edit" : "create"}
+          isOpen={isPatientModalOpen}
+          initialData={editingSession}
+          onClose={closePatientModal}
+          onSubmit={submitPatientSession}
+        />
+
+        <GCCDeleteSessionDialog
+          session={sessionToDelete}
+          isDeleting={isDeleting}
+          onClose={closeDeleteDialog}
+          onConfirm={() => void confirmDeleteSession()}
+        />
 
         {toast && (
-          <div role="status" aria-live="polite" className="fixed bottom-5 right-5 z-[130] rounded-[12px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 shadow-[0_18px_45px_rgba(15,23,42,0.14)]">
-            {toast}
+          <div
+            role="status"
+            aria-live="polite"
+            className={cx(
+              "fixed bottom-5 right-5 z-[150] rounded-[12px] border px-4 py-3 text-sm font-bold shadow-[0_18px_45px_rgba(15,23,42,0.14)]",
+              toast.tone === "success" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-rose-200 bg-rose-50 text-rose-700",
+            )}
+          >
+            {toast.message}
           </div>
         )}
       </main>
@@ -466,12 +508,25 @@ function ActionItem({ title, date, detail, context, tone }: { title: string; dat
   );
 }
 
-function UpcomingSessions({ sessions }: { sessions: GCCUpcomingSession[] }) {
+function UpcomingSessions({
+  sessions,
+  onEdit,
+  onDelete,
+}: {
+  sessions: GCCUpcomingSession[];
+  onEdit: (session: GCCUpcomingSession) => void;
+  onDelete: (session: GCCUpcomingSession) => void;
+}) {
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const closeMenu = useCallback(() => setOpenMenuId(null), []);
+
   return (
     <aside className="h-fit w-full min-w-0 lg:sticky lg:top-6">
       <div className="w-full">
         <div className="flex w-full items-center justify-between">
-          <h2 className="text-[18px] font-medium leading-[23px] text-slate-950">Upcoming Sessions</h2>
+          <h2 id="gcc-upcoming-sessions-heading" tabIndex={-1} className="text-[18px] font-medium leading-[23px] text-slate-950">
+            Upcoming Sessions
+          </h2>
           <ArrowRightIcon className="size-5 text-slate-700" />
         </div>
         <p className="mt-[3px] text-[12px] font-medium leading-4 text-zinc-400">19 sessions remaining ahead</p>
@@ -479,25 +534,147 @@ function UpcomingSessions({ sessions }: { sessions: GCCUpcomingSession[] }) {
 
       <div className="mt-4 flex flex-col gap-2.5">
         {sessions.map((session) => (
-          <SessionCard key={session.id} session={session} />
+          <SessionCard
+            key={session.id}
+            session={session}
+            isMenuOpen={openMenuId === session.id}
+            onToggleMenu={() => setOpenMenuId((currentId) => (currentId === session.id ? null : session.id))}
+            onCloseMenu={closeMenu}
+            onEdit={onEdit}
+            onDelete={onDelete}
+          />
         ))}
       </div>
     </aside>
   );
 }
 
-function SessionCard({ session }: { session: GCCUpcomingSession }) {
+function SessionCard({
+  session,
+  isMenuOpen,
+  onToggleMenu,
+  onCloseMenu,
+  onEdit,
+  onDelete,
+}: {
+  session: GCCUpcomingSession;
+  isMenuOpen: boolean;
+  onToggleMenu: () => void;
+  onCloseMenu: () => void;
+  onEdit: (session: GCCUpcomingSession) => void;
+  onDelete: (session: GCCUpcomingSession) => void;
+}) {
   const statusTone = getStatusTone(session.status);
   const sessionDateTime = formatSessionDateTime(session.sessionDate, session.sessionTime);
+  const menuId = useId();
+  const triggerId = `${menuId}-trigger`;
+  const actionsRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const focusLastItemRef = useRef(false);
+
+  useEffect(() => {
+    if (!isMenuOpen) {
+      return;
+    }
+
+    const animationFrame = window.requestAnimationFrame(() => {
+      const menuItems = getMenuItems(menuRef.current);
+      const target = focusLastItemRef.current ? menuItems[menuItems.length - 1] : menuItems[0];
+      target?.focus();
+      focusLastItemRef.current = false;
+    });
+
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !actionsRef.current?.contains(target)) {
+        onCloseMenu();
+      }
+    };
+
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseMenu();
+        triggerRef.current?.focus();
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleEscape);
+
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleEscape);
+    };
+  }, [isMenuOpen, onCloseMenu]);
+
+  const handleTriggerClick = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    focusLastItemRef.current = false;
+    onToggleMenu();
+  };
+
+  const handleTriggerKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    focusLastItemRef.current = event.key === "ArrowUp";
+    if (!isMenuOpen) {
+      onToggleMenu();
+    }
+  };
+
+  const handleMenuKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const menuItems = getMenuItems(menuRef.current);
+    const currentIndex = menuItems.indexOf(document.activeElement as HTMLButtonElement);
+    let nextIndex: number | null = null;
+
+    if (event.key === "ArrowDown") {
+      nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % menuItems.length;
+    } else if (event.key === "ArrowUp") {
+      nextIndex = currentIndex < 0 ? menuItems.length - 1 : (currentIndex - 1 + menuItems.length) % menuItems.length;
+    } else if (event.key === "Home") {
+      nextIndex = 0;
+    } else if (event.key === "End") {
+      nextIndex = menuItems.length - 1;
+    }
+
+    if (nextIndex !== null && menuItems[nextIndex]) {
+      event.preventDefault();
+      menuItems[nextIndex].focus();
+    }
+  };
+
+  const handleEdit = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    triggerRef.current?.focus();
+    onCloseMenu();
+    onEdit(session);
+  };
+
+  const handleDelete = (event: MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    triggerRef.current?.focus();
+    onCloseMenu();
+    onDelete(session);
+  };
 
   return (
-    <article className="flex min-h-[106px] items-center gap-3 rounded-[12px] border border-[#e5e7eb] bg-white px-[15px] py-[13px] shadow-[0_5px_15px_rgba(15,23,42,0.035)]">
+    <article className="relative flex min-h-[106px] items-center gap-3 rounded-[12px] border border-[#e5e7eb] bg-white px-[15px] py-[13px] shadow-[0_5px_15px_rgba(15,23,42,0.035)]">
       {session.avatarUrl ? (
         <img src={session.avatarUrl} alt="" className="size-10 shrink-0 rounded-full object-cover ring-2 ring-white" />
       ) : (
         <span className="grid size-10 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700 ring-2 ring-white">{session.initials}</span>
       )}
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 pr-7">
         <div>
           <h3 className="truncate text-[16px] font-semibold leading-5 text-slate-950">{session.patientName}</h3>
           <p className="mt-1 flex min-w-0 items-center gap-x-1.5 overflow-hidden text-[12px] font-medium leading-4 text-slate-500">
@@ -522,8 +699,75 @@ function SessionCard({ session }: { session: GCCUpcomingSession }) {
         </div>
       </div>
       <ChevronRightIcon className="size-4 shrink-0 text-slate-300" />
+
+      <div
+        ref={actionsRef}
+        className="absolute right-8 top-2.5 z-[70]"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+        }}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) {
+            onCloseMenu();
+          }
+        }}
+      >
+        <button
+          ref={triggerRef}
+          id={triggerId}
+          type="button"
+          aria-label={`Actions for ${session.patientName}`}
+          aria-haspopup="menu"
+          aria-expanded={isMenuOpen}
+          aria-controls={isMenuOpen ? menuId : undefined}
+          onClick={handleTriggerClick}
+          onKeyDown={handleTriggerKeyDown}
+          className="grid size-7 place-items-center rounded-full bg-white/90 text-slate-400 transition hover:bg-slate-50 hover:text-slate-700"
+        >
+          <EllipsisVerticalIcon className="size-4" />
+        </button>
+
+        {isMenuOpen && (
+          <div
+            ref={menuRef}
+            id={menuId}
+            role="menu"
+            aria-labelledby={triggerId}
+            onKeyDown={handleMenuKeyDown}
+            className="absolute right-0 top-[calc(100%+6px)] z-[80] w-44 overflow-hidden rounded-[11px] border border-slate-200 bg-white p-1.5 shadow-[0_16px_40px_rgba(15,23,42,0.16)]"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleEdit}
+              className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] font-semibold text-[#080B3A] transition hover:bg-slate-50"
+            >
+              <PencilIcon className="size-4" />
+              Edit Session
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={handleDelete}
+              className="flex w-full items-center gap-2 rounded-[8px] px-2.5 py-2 text-left text-[13px] font-semibold text-rose-600 transition hover:bg-rose-50"
+            >
+              <TrashIcon className="size-4" />
+              Delete Session
+            </button>
+          </div>
+        )}
+      </div>
     </article>
   );
+}
+
+function getMenuItems(menu: HTMLDivElement | null) {
+  if (!menu) {
+    return [];
+  }
+
+  return Array.from(menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
 }
 
 function getStatusTone(status: GCCUpcomingSession["status"]) {
@@ -607,6 +851,31 @@ function MoreHorizontalIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
       <path d="M6 12h.01M12 12h.01M18 12h.01" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="3" />
+    </svg>
+  );
+}
+
+function EllipsisVerticalIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path d="M12 6h.01M12 12h.01M12 18h.01" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2.8" />
+    </svg>
+  );
+}
+
+function PencilIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path d="m4 20 4.25-1 10.9-10.9a2.1 2.1 0 0 0-3-3L5.25 16 4 20Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+      <path d="m14.75 6.5 3 3" fill="none" stroke="currentColor" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function TrashIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
+      <path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
     </svg>
   );
 }

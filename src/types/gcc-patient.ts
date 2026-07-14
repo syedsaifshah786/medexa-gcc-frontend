@@ -20,4 +20,5 @@ export type GCCUpcomingSession = {
     | "Verified";
   referenceId: string;
   createdAt: string;
+  updatedAt?: string;
 };

@@ -8,12 +8,18 @@ import {
   type FormEvent,
   type KeyboardEvent,
   type MouseEvent,
+  type Ref,
 } from "react";
 import type { GCCUpcomingSession } from "@/types/gcc-patient";
 
+export type PatientModalMode = "create" | "edit";
+
 type GCCAddPatientModalProps = {
+  mode: PatientModalMode;
+  isOpen: boolean;
+  initialData: GCCUpcomingSession | null;
   onClose: () => void;
-  onAddPatient: (session: GCCUpcomingSession) => void;
+  onSubmit: (session: GCCUpcomingSession) => boolean;
 };
 
 const sessionTypes = [
@@ -25,20 +31,31 @@ const sessionTypes = [
   "Cardiac Rehabilitation",
 ] as const;
 
-const sessionStatuses = ["Upcoming", "Active", "Pre-Auth Required", "Auth Pending"] as const;
-const nphiesStatuses = ["Pending", "Cleared", "Queued", "Inactive", "Verified"] as const;
-
-type SessionType = (typeof sessionTypes)[number];
-type SessionStatus = (typeof sessionStatuses)[number];
-type NphiesStatus = (typeof nphiesStatuses)[number];
+const createSessionStatuses: readonly GCCUpcomingSession["status"][] = [
+  "Upcoming",
+  "Active",
+  "Pre-Auth Required",
+  "Auth Pending",
+];
+const editSessionStatuses: readonly GCCUpcomingSession["status"][] = [
+  ...createSessionStatuses,
+  "Completed",
+];
+const nphiesStatuses: readonly GCCUpcomingSession["nphiesStatus"][] = [
+  "Pending",
+  "Cleared",
+  "Queued",
+  "Inactive",
+  "Verified",
+];
 
 type FormValues = {
   patientName: string;
-  sessionType: SessionType | "";
+  sessionType: string;
   sessionDate: string;
   sessionTime: string;
-  status: SessionStatus;
-  nphiesStatus: NphiesStatus;
+  status: GCCUpcomingSession["status"];
+  nphiesStatus: GCCUpcomingSession["nphiesStatus"];
   avatarUrl: string;
 };
 
@@ -55,19 +72,60 @@ const initialValues: FormValues = {
   avatarUrl: "",
 };
 
-export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPatientModalProps) {
+export default function GCCAddPatientModal(props: GCCAddPatientModalProps) {
+  if (!props.isOpen || (props.mode === "edit" && !props.initialData)) {
+    return null;
+  }
+
+  const initialData = props.mode === "edit" ? props.initialData : null;
+  const modalKey = `${props.mode}:${initialData?.id ?? "new"}`;
+
+  return (
+    <GCCPatientSessionModalContent
+      key={modalKey}
+      mode={props.mode}
+      initialData={initialData}
+      onClose={props.onClose}
+      onSubmit={props.onSubmit}
+    />
+  );
+}
+
+type GCCPatientSessionModalContentProps = Omit<GCCAddPatientModalProps, "isOpen">;
+
+function GCCPatientSessionModalContent({
+  mode,
+  initialData,
+  onClose,
+  onSubmit,
+}: GCCPatientSessionModalContentProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const patientNameRef = useRef<HTMLInputElement>(null);
   const onCloseRef = useRef(onClose);
   const dialogId = useId();
   const titleId = `${dialogId}-title`;
   const descriptionId = `${dialogId}-description`;
-  const [values, setValues] = useState<FormValues>(initialValues);
+  const [values, setValues] = useState<FormValues>(() => getInitialValues(initialData));
   const [touched, setTouched] = useState<Partial<Record<RequiredField, boolean>>>({});
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const validationErrors = validateForm(values);
+  const validationErrors = validateForm(values, initialData);
   const isFormValid = Object.keys(validationErrors).length === 0;
+  const isEditMode = mode === "edit";
+  const requiresSessionType = !isEditMode || Boolean(initialData?.sessionType);
+  const requiresSessionDate = !isEditMode || Boolean(initialData?.sessionDate);
+  const requiresSessionTime = !isEditMode || Boolean(initialData?.sessionTime);
+  const title = isEditMode ? "Edit Upcoming Session" : "Add New Patient";
+  const description = isEditMode
+    ? "Update patient and session information"
+    : "Create an upcoming patient session";
+  const submitLabel = isEditMode ? "Save Changes" : "Add Patient";
+  const submittingLabel = isEditMode ? "Saving Changes..." : "Adding Patient...";
+  const sessionTypeOptions: readonly string[] =
+    values.sessionType && !sessionTypes.some((sessionType) => sessionType === values.sessionType)
+      ? [values.sessionType, ...sessionTypes]
+      : sessionTypes;
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -78,7 +136,7 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
     const previousOverflow = document.body.style.overflow;
 
     document.body.style.overflow = "hidden";
-    dialogRef.current?.focus();
+    patientNameRef.current?.focus({ preventScroll: true });
 
     const handleEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -112,7 +170,7 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
     setHasAttemptedSubmit(true);
     setTouched({ patientName: true, sessionType: true, sessionDate: true, sessionTime: true });
 
-    const formErrors = validateForm(values);
+    const formErrors = validateForm(values, initialData);
     if (Object.keys(formErrors).length > 0 || isSubmitting) {
       return;
     }
@@ -121,23 +179,36 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
 
     const patientName = values.patientName.trim();
     const avatarUrl = values.avatarUrl.trim();
-    const session: GCCUpcomingSession = {
-      id: globalThis.crypto.randomUUID(),
+    const editableValues = {
       patientName,
       initials: getInitials(patientName),
-      ...(avatarUrl ? { avatarUrl } : {}),
+      avatarUrl: avatarUrl || undefined,
       sessionType: values.sessionType,
       sessionDate: values.sessionDate,
       sessionTime: values.sessionTime,
       status: values.status,
       nphiesStatus: values.nphiesStatus,
-      referenceId: generateReferenceId(),
-      createdAt: new Date().toISOString(),
+    };
+
+    const session: GCCUpcomingSession =
+      isEditMode && initialData
+        ? {
+            ...initialData,
+            ...editableValues,
+          }
+        : {
+            id: globalThis.crypto.randomUUID(),
+            ...editableValues,
+            referenceId: generateReferenceId(),
+            createdAt: new Date().toISOString(),
     };
 
     try {
-      onAddPatient(session);
-      onClose();
+      if (onSubmit(session)) {
+        onClose();
+      } else {
+        setIsSubmitting(false);
+      }
     } catch (error) {
       setIsSubmitting(false);
       throw error;
@@ -199,16 +270,16 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
         <header className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
           <div className="min-w-0">
             <h2 id={titleId} className="text-[18px] font-extrabold leading-6 text-slate-950">
-              Add New Patient
+              {title}
             </h2>
             <p id={descriptionId} className="mt-1 text-[13px] font-medium leading-5 text-slate-500">
-              Create an upcoming patient session
+              {description}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close Add New Patient dialog"
+            aria-label={`Close ${title} dialog`}
             className="grid size-8 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-700"
           >
             <CloseIcon className="size-4" />
@@ -219,6 +290,7 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
           <div className="space-y-4 px-5 py-5">
             <TextField
               id="patientName"
+              inputRef={patientNameRef}
               label="Patient Name"
               value={values.patientName}
               placeholder="Enter patient full name"
@@ -233,9 +305,9 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
               id="sessionType"
               label="Session Type"
               value={values.sessionType}
-              options={sessionTypes}
+              options={sessionTypeOptions}
               placeholder="Select session type"
-              required
+              required={requiresSessionType}
               error={visibleError("sessionType")}
               onBlur={() => markTouched("sessionType")}
               onChange={(value) => updateField("sessionType", value)}
@@ -247,7 +319,7 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
                 label="Session Date"
                 type="date"
                 value={values.sessionDate}
-                required
+                required={requiresSessionDate}
                 error={visibleError("sessionDate")}
                 onBlur={() => markTouched("sessionDate")}
                 onChange={(value) => updateField("sessionDate", value)}
@@ -257,7 +329,7 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
                 label="Session Time"
                 type="time"
                 value={values.sessionTime}
-                required
+                required={requiresSessionTime}
                 error={visibleError("sessionTime")}
                 onBlur={() => markTouched("sessionTime")}
                 onChange={(value) => updateField("sessionTime", value)}
@@ -269,7 +341,7 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
                 id="status"
                 label="Status"
                 value={values.status}
-                options={sessionStatuses}
+                options={isEditMode ? editSessionStatuses : createSessionStatuses}
                 onChange={(value) => updateField("status", value)}
               />
               <SelectField
@@ -311,7 +383,7 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
               }`}
             >
               <UserPlusIcon className="size-4" />
-              {isSubmitting ? "Adding Patient..." : "Add Patient"}
+              {isSubmitting ? submittingLabel : submitLabel}
             </button>
           </footer>
         </form>
@@ -320,22 +392,38 @@ export default function GCCAddPatientModal({ onClose, onAddPatient }: GCCAddPati
   );
 }
 
-function validateForm(values: FormValues): FieldErrors {
+function getInitialValues(initialData: GCCUpcomingSession | null): FormValues {
+  if (!initialData) {
+    return { ...initialValues };
+  }
+
+  return {
+    patientName: initialData.patientName,
+    sessionType: initialData.sessionType,
+    sessionDate: initialData.sessionDate,
+    sessionTime: initialData.sessionTime,
+    status: initialData.status,
+    nphiesStatus: initialData.nphiesStatus,
+    avatarUrl: initialData.avatarUrl ?? "",
+  };
+}
+
+function validateForm(values: FormValues, initialData: GCCUpcomingSession | null): FieldErrors {
   const errors: FieldErrors = {};
 
   if (!values.patientName.trim()) {
     errors.patientName = "Patient name is required.";
   }
 
-  if (!values.sessionType) {
+  if (!values.sessionType && (!initialData || Boolean(initialData.sessionType))) {
     errors.sessionType = "Session type is required.";
   }
 
-  if (!values.sessionDate) {
+  if (!values.sessionDate && (!initialData || Boolean(initialData.sessionDate))) {
     errors.sessionDate = "Session date is required.";
   }
 
-  if (!values.sessionTime) {
+  if (!values.sessionTime && (!initialData || Boolean(initialData.sessionTime))) {
     errors.sessionTime = "Session time is required.";
   }
 
@@ -376,6 +464,7 @@ function fieldClassName(hasError: boolean) {
 
 function TextField({
   id,
+  inputRef,
   label,
   value,
   onChange,
@@ -388,6 +477,7 @@ function TextField({
   helperText,
 }: {
   id: string;
+  inputRef?: Ref<HTMLInputElement>;
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -414,6 +504,7 @@ function TextField({
         )}
       </label>
       <input
+        ref={inputRef}
         id={id}
         name={id}
         type={type}
