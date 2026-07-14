@@ -1,53 +1,111 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import GCCHeader from "@/components/gcc/GCCHeader";
+import GCCAddPatientModal from "@/components/gcc/GCCAddPatientModal";
 import { useGCCVoiceSession } from "@/hooks/useGCCVoiceSession";
+import type { GCCUpcomingSession } from "@/types/gcc-patient";
 
 /* eslint-disable @next/next/no-img-element -- Prototype dashboard uses static mocked patient avatars. */
 
-type SessionStatus = "Active" | "Upcoming" | "Pre-Auth Required" | "Auth Pending" | "Completed";
-type NphiesStatus = "Cleared" | "Queued" | "Inactive" | "Verified";
+const CUSTOM_SESSIONS_STORAGE_KEY = "medexa_gcc_custom_upcoming_sessions";
 
-type SessionRecord = {
-  id: string;
-  name: string;
-  status: SessionStatus;
-  nphies: NphiesStatus;
-  refId?: string;
-  avatar?: string;
-};
+const sessionStatuses: GCCUpcomingSession["status"][] = ["Active", "Upcoming", "Pre-Auth Required", "Auth Pending", "Completed"];
+const nphiesStatuses: GCCUpcomingSession["nphiesStatus"][] = ["Cleared", "Queued", "Pending", "Inactive", "Verified"];
 
-type PatientDetails = {
-  firstName: string;
-  lastName: string;
-  dob: string;
-  mrn: string;
-};
-
-type PatientRecord = PatientDetails & {
-  signature: string;
-};
-
-type FieldErrors = Partial<Record<keyof PatientDetails, string>>;
-type ModalStep = "none" | "details" | "consent";
-
-const initialPatient: PatientDetails = {
-  firstName: "",
-  lastName: "",
-  dob: "",
-  mrn: "",
-};
-
-const dashboardSessions: SessionRecord[] = [
-  { id: "samuel-thompson", name: "Samuel Thompson", status: "Active", nphies: "Cleared", refId: "PA-2026-00847231", avatar: "https://i.pravatar.cc/96?img=12" },
-  { id: "fatima-zahra-1", name: "Fatima Zahra", status: "Upcoming", nphies: "Cleared", refId: "PA-2026-00847231", avatar: "https://i.pravatar.cc/96?img=32" },
-  { id: "sarah-williams", name: "Sarah Williams", status: "Pre-Auth Required", nphies: "Queued", refId: "PA-2026-00847231", avatar: "https://i.pravatar.cc/96?img=47" },
-  { id: "ahmed-abdullah", name: "Ahmed Abdullah", status: "Auth Pending", nphies: "Inactive", refId: "PA-2026-00847231", avatar: "https://i.pravatar.cc/96?img=13" },
-  { id: "lina-chen", name: "Lina Chen", status: "Completed", nphies: "Verified", refId: "PA-2026-00937462", avatar: "https://i.pravatar.cc/96?img=29" },
-  { id: "jameson-locke", name: "Jameson Locke", status: "Auth Pending", nphies: "Inactive", refId: "PA-2026-00847231", avatar: "https://i.pravatar.cc/96?img=14" },
-  { id: "fatima-zahra-2", name: "Fatima Zahra", status: "Upcoming", nphies: "Cleared", avatar: "https://i.pravatar.cc/96?img=45" },
+const dashboardSessions: GCCUpcomingSession[] = [
+  {
+    id: "samuel-thompson",
+    patientName: "Samuel Thompson",
+    initials: "ST",
+    avatarUrl: "https://i.pravatar.cc/96?img=12",
+    sessionType: "",
+    sessionDate: "",
+    sessionTime: "",
+    status: "Active",
+    nphiesStatus: "Cleared",
+    referenceId: "PA-2026-00847231",
+    createdAt: "2026-07-13T00:00:00.000Z",
+  },
+  {
+    id: "fatima-zahra-1",
+    patientName: "Fatima Zahra",
+    initials: "FZ",
+    avatarUrl: "https://i.pravatar.cc/96?img=32",
+    sessionType: "",
+    sessionDate: "",
+    sessionTime: "",
+    status: "Upcoming",
+    nphiesStatus: "Cleared",
+    referenceId: "PA-2026-00847231",
+    createdAt: "2026-07-13T00:00:00.000Z",
+  },
+  {
+    id: "sarah-williams",
+    patientName: "Sarah Williams",
+    initials: "SW",
+    avatarUrl: "https://i.pravatar.cc/96?img=47",
+    sessionType: "",
+    sessionDate: "",
+    sessionTime: "",
+    status: "Pre-Auth Required",
+    nphiesStatus: "Queued",
+    referenceId: "PA-2026-00847231",
+    createdAt: "2026-07-13T00:00:00.000Z",
+  },
+  {
+    id: "ahmed-abdullah",
+    patientName: "Ahmed Abdullah",
+    initials: "AA",
+    avatarUrl: "https://i.pravatar.cc/96?img=13",
+    sessionType: "",
+    sessionDate: "",
+    sessionTime: "",
+    status: "Auth Pending",
+    nphiesStatus: "Inactive",
+    referenceId: "PA-2026-00847231",
+    createdAt: "2026-07-13T00:00:00.000Z",
+  },
+  {
+    id: "lina-chen",
+    patientName: "Lina Chen",
+    initials: "LC",
+    avatarUrl: "https://i.pravatar.cc/96?img=29",
+    sessionType: "",
+    sessionDate: "",
+    sessionTime: "",
+    status: "Completed",
+    nphiesStatus: "Verified",
+    referenceId: "PA-2026-00937462",
+    createdAt: "2026-07-13T00:00:00.000Z",
+  },
+  {
+    id: "jameson-locke",
+    patientName: "Jameson Locke",
+    initials: "JL",
+    avatarUrl: "https://i.pravatar.cc/96?img=14",
+    sessionType: "",
+    sessionDate: "",
+    sessionTime: "",
+    status: "Auth Pending",
+    nphiesStatus: "Inactive",
+    referenceId: "PA-2026-00847231",
+    createdAt: "2026-07-13T00:00:00.000Z",
+  },
+  {
+    id: "fatima-zahra-2",
+    patientName: "Fatima Zahra",
+    initials: "FZ",
+    avatarUrl: "https://i.pravatar.cc/96?img=45",
+    sessionType: "",
+    sessionDate: "",
+    sessionTime: "",
+    status: "Upcoming",
+    nphiesStatus: "Cleared",
+    referenceId: "",
+    createdAt: "2026-07-13T00:00:00.000Z",
+  },
 ];
 
 const metrics = [
@@ -63,21 +121,72 @@ const dueActionItems = [
   { title: "Claim Validation Needed", date: "July 05", detail: "John D", context: "Post-Op Rec", tone: "warning" as const },
 ];
 
-const todayInputValue = () => {
-  const now = new Date();
-  const offsetDate = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-  return offsetDate.toISOString().slice(0, 10);
-};
-
-const getInitials = (name: string) =>
-  name
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
-
 const cx = (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" ");
+
+function isGCCUpcomingSession(value: unknown): value is GCCUpcomingSession {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const session = value as Record<string, unknown>;
+
+  return (
+    typeof session.id === "string" &&
+    typeof session.patientName === "string" &&
+    typeof session.initials === "string" &&
+    (session.avatarUrl === undefined || typeof session.avatarUrl === "string") &&
+    typeof session.sessionType === "string" &&
+    typeof session.sessionDate === "string" &&
+    typeof session.sessionTime === "string" &&
+    sessionStatuses.includes(session.status as GCCUpcomingSession["status"]) &&
+    nphiesStatuses.includes(session.nphiesStatus as GCCUpcomingSession["nphiesStatus"]) &&
+    typeof session.referenceId === "string" &&
+    typeof session.createdAt === "string"
+  );
+}
+
+function loadCustomSessions() {
+  try {
+    const savedValue = window.localStorage.getItem(CUSTOM_SESSIONS_STORAGE_KEY);
+    if (!savedValue) {
+      return [];
+    }
+
+    const parsedValue: unknown = JSON.parse(savedValue);
+    if (!Array.isArray(parsedValue)) {
+      return [];
+    }
+
+    const seenIds = new Set(dashboardSessions.map((session) => session.id));
+
+    return parsedValue.filter(isGCCUpcomingSession).filter((session) => {
+      if (seenIds.has(session.id)) {
+        return false;
+      }
+
+      seenIds.add(session.id);
+      return true;
+    });
+  } catch {
+    return [];
+  }
+}
+
+function formatSessionDateTime(sessionDate: string, sessionTime: string) {
+  if (!sessionDate || !sessionTime) {
+    return "";
+  }
+
+  const dateTime = new Date(`${sessionDate}T${sessionTime}`);
+  if (Number.isNaN(dateTime.getTime())) {
+    return "";
+  }
+
+  const date = dateTime.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const time = dateTime.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+
+  return `${date} \u2022 ${time}`;
+}
 
 export default function GCCAmbientDashboard() {
   const router = useRouter();
@@ -89,38 +198,25 @@ export default function GCCAmbientDashboard() {
     startAmbientCommandListening,
     startSession,
   } = useGCCVoiceSession();
-  const [modalStep, setModalStep] = useState<ModalStep>("none");
-  const [patientDetails, setPatientDetails] = useState<PatientDetails>(initialPatient);
-  const [errors, setErrors] = useState<FieldErrors>({});
-  const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
-  const [signatureDataUrl, setSignatureDataUrl] = useState("");
-  const [savedPatients, setSavedPatients] = useState<PatientRecord[]>([]);
-  const [createdSessions, setCreatedSessions] = useState<SessionRecord[]>([]);
+  const [isAddPatientOpen, setIsAddPatientOpen] = useState(false);
+  const [customSessions, setCustomSessions] = useState<GCCUpcomingSession[]>([]);
   const [toast, setToast] = useState("");
 
-  const sessions = useMemo(() => [...createdSessions, ...dashboardSessions], [createdSessions]);
-  const maxDob = useMemo(() => todayInputValue(), []);
+  const sessions = useMemo(() => [...customSessions, ...dashboardSessions], [customSessions]);
   const currentDate = "Tuesday, Jul 13, 2026";
 
   useEffect(() => {
-    if (modalStep === "none") {
-      return;
-    }
-
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-    };
-  }, [modalStep]);
+    // Browser storage is intentionally hydrated only after the server-rendered view mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setCustomSessions(loadCustomSessions());
+  }, []);
 
   useEffect(() => {
     if (!toast) {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => setToast(""), 3200);
+    const timeoutId = window.setTimeout(() => setToast(""), 2500);
     return () => window.clearTimeout(timeoutId);
   }, [toast]);
 
@@ -130,92 +226,25 @@ export default function GCCAmbientDashboard() {
     }
   }, [permissionStatus, startAmbientCommandListening]);
 
-  const validateDetails = useCallback((details: PatientDetails) => {
-    const nextErrors: FieldErrors = {};
-    const today = todayInputValue();
+  const openAddPatient = useCallback(() => setIsAddPatientOpen(true), []);
+  const closeAddPatient = useCallback(() => setIsAddPatientOpen(false), []);
 
-    if (!details.firstName.trim()) {
-      nextErrors.firstName = "First Name is required.";
-    }
+  const addPatient = useCallback(
+    (newSession: GCCUpcomingSession) => {
+      const nextCustomSessions = [newSession, ...customSessions.filter((session) => session.id !== newSession.id)];
 
-    if (!details.lastName.trim()) {
-      nextErrors.lastName = "Last Name is required.";
-    }
+      setCustomSessions(nextCustomSessions);
+      try {
+        window.localStorage.setItem(CUSTOM_SESSIONS_STORAGE_KEY, JSON.stringify(nextCustomSessions));
+      } catch {
+        // Keep the in-memory prototype usable when browser storage is unavailable.
+      }
 
-    if (!details.dob) {
-      nextErrors.dob = "DOB is required.";
-    } else if (details.dob > today) {
-      nextErrors.dob = "DOB cannot be a future date.";
-    }
-
-    if (!details.mrn.trim()) {
-      nextErrors.mrn = "MRN/Reference ID is required.";
-    }
-
-    return nextErrors;
-  }, []);
-
-  const openDetailsModal = () => {
-    setPatientDetails(initialPatient);
-    setErrors({});
-    setHasAttemptedSubmit(false);
-    setSignatureDataUrl("");
-    setModalStep("details");
-  };
-
-  const closeModal = () => {
-    setModalStep("none");
-    setErrors({});
-    setHasAttemptedSubmit(false);
-    setSignatureDataUrl("");
-  };
-
-  const updatePatientField = (field: keyof PatientDetails, value: string) => {
-    const nextDetails = { ...patientDetails, [field]: value };
-    setPatientDetails(nextDetails);
-
-    if (hasAttemptedSubmit) {
-      setErrors(validateDetails(nextDetails));
-    }
-  };
-
-  const submitDetails = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setHasAttemptedSubmit(true);
-
-    const nextErrors = validateDetails(patientDetails);
-    setErrors(nextErrors);
-
-    if (Object.keys(nextErrors).length === 0) {
-      setModalStep("consent");
-    }
-  };
-
-  const completeConsent = () => {
-    if (!signatureDataUrl) {
-      return;
-    }
-
-    const fullName = `${patientDetails.firstName.trim()} ${patientDetails.lastName.trim()}`;
-    const savedPatient = {
-      ...patientDetails,
-      signature: signatureDataUrl,
-    };
-
-    setSavedPatients((patients) => [savedPatient, ...patients]);
-    setCreatedSessions((items) => [
-      {
-        id: `created-${Date.now()}`,
-        name: fullName,
-        status: "Upcoming",
-        nphies: "Queued",
-        refId: patientDetails.mrn.trim(),
-      },
-      ...items,
-    ]);
-    setToast("Patient added successfully.");
-    closeModal();
-  };
+      setIsAddPatientOpen(false);
+      setToast("Patient added to Upcoming Sessions");
+    },
+    [customSessions],
+  );
 
   const startNewSession = async () => {
     const id = await startSession({ source: "manual" });
@@ -248,113 +277,25 @@ export default function GCCAmbientDashboard() {
                 }
               }}
             />
-            <DashboardActionButtons onAddPatient={openDetailsModal} onStartSession={startNewSession} className="mt-4 lg:hidden" />
+            <DashboardActionButtons onAddPatient={openAddPatient} onStartSession={startNewSession} className="mt-4 lg:hidden" />
             <NewSessionCallout onStartSession={startNewSession} />
             <OperationalHealth />
             <DueActionItems />
           </div>
 
           <div className="w-full min-w-0">
-            <DashboardActionButtons onAddPatient={openDetailsModal} onStartSession={startNewSession} className="mb-6 hidden lg:flex lg:justify-end" />
+            <DashboardActionButtons onAddPatient={openAddPatient} onStartSession={startNewSession} className="mb-6 hidden lg:flex lg:justify-end" />
             <UpcomingSessions sessions={sessions} />
           </div>
         </div>
 
-        {modalStep === "details" && (
-          <Modal
-            title="Add Patient Details"
-            subtitle="Provide basic info about the patient."
-            onClose={closeModal}
-            footer={
-              <>
-                <button type="button" onClick={closeModal} className="inline-flex h-10 items-center justify-center gap-2 rounded-[10px] border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-                  <XIcon className="size-4" />
-                  Cancel
-                </button>
-                <button type="submit" form="patient-details-form" className="inline-flex h-10 items-center justify-center gap-2 rounded-[10px] bg-[#111936] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(17,25,54,0.2)] transition hover:bg-[#18234a]">
-                  <ArrowRightIcon className="size-4" />
-                  Save & Continue
-                </button>
-              </>
-            }
-          >
-            <form id="patient-details-form" onSubmit={submitDetails} noValidate className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <FormInput
-                  id="firstName"
-                  label="First Name"
-                  value={patientDetails.firstName}
-                  error={errors.firstName}
-                  onChange={(value) => updatePatientField("firstName", value)}
-                  autoComplete="given-name"
-                />
-                <FormInput
-                  id="lastName"
-                  label="Last Name"
-                  value={patientDetails.lastName}
-                  error={errors.lastName}
-                  onChange={(value) => updatePatientField("lastName", value)}
-                  autoComplete="family-name"
-                />
-              </div>
-              <FormInput
-                id="dob"
-                label="DOB"
-                type="date"
-                value={patientDetails.dob}
-                error={errors.dob}
-                max={maxDob}
-                icon={<CalendarIcon className="size-4" />}
-                onChange={(value) => updatePatientField("dob", value)}
-              />
-              <FormInput
-                id="mrn"
-                label="MRN/Reference ID"
-                value={patientDetails.mrn}
-                error={errors.mrn}
-                helperText="Please enter patient's MRN or reference ID."
-                onChange={(value) => updatePatientField("mrn", value)}
-              />
-            </form>
-          </Modal>
-        )}
-
-        {modalStep === "consent" && (
-          <Modal
-            title="PDPL Patient Consent"
-            subtitle="By providing the signature, patient consents to share his information."
-            onClose={closeModal}
-            footer={
-              <>
-                <button type="button" onClick={closeModal} className="inline-flex h-10 items-center justify-center gap-2 rounded-[10px] border border-slate-200 bg-white px-4 text-sm font-bold text-slate-700 transition hover:bg-slate-50">
-                  <XIcon className="size-4" />
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={completeConsent}
-                  disabled={!signatureDataUrl}
-                  className="inline-flex h-10 items-center justify-center gap-2 rounded-[10px] bg-[#111936] px-4 text-sm font-bold text-white shadow-[0_10px_24px_rgba(17,25,54,0.2)] transition hover:bg-[#18234a] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
-                >
-                  <ArrowRightIcon className="size-4" />
-                  Save & Continue
-                </button>
-              </>
-            }
-          >
-            <SignatureCanvas value={signatureDataUrl} onChange={setSignatureDataUrl} />
-          </Modal>
-        )}
+        {isAddPatientOpen && <GCCAddPatientModal onClose={closeAddPatient} onAddPatient={addPatient} />}
 
         {toast && (
-          <div role="status" aria-live="polite" className="fixed bottom-5 left-1/2 z-50 -translate-x-1/2 rounded-[12px] border border-emerald-200 bg-white px-4 py-3 text-sm font-bold text-emerald-700 shadow-[0_18px_45px_rgba(15,23,42,0.14)]">
+          <div role="status" aria-live="polite" className="fixed bottom-5 right-5 z-[130] rounded-[12px] border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700 shadow-[0_18px_45px_rgba(15,23,42,0.14)]">
             {toast}
           </div>
         )}
-
-        <span className="sr-only" aria-live="polite">
-          {savedPatients.length ? `${savedPatients.length} patient records saved.` : ""}
-        </span>
       </main>
     </div>
   );
@@ -525,7 +466,7 @@ function ActionItem({ title, date, detail, context, tone }: { title: string; dat
   );
 }
 
-function UpcomingSessions({ sessions }: { sessions: SessionRecord[] }) {
+function UpcomingSessions({ sessions }: { sessions: GCCUpcomingSession[] }) {
   return (
     <aside className="h-fit w-full min-w-0 lg:sticky lg:top-6">
       <div className="w-full">
@@ -545,30 +486,39 @@ function UpcomingSessions({ sessions }: { sessions: SessionRecord[] }) {
   );
 }
 
-function SessionCard({ session }: { session: SessionRecord }) {
+function SessionCard({ session }: { session: GCCUpcomingSession }) {
   const statusTone = getStatusTone(session.status);
+  const sessionDateTime = formatSessionDateTime(session.sessionDate, session.sessionTime);
 
   return (
     <article className="flex min-h-[106px] items-center gap-3 rounded-[12px] border border-[#e5e7eb] bg-white px-[15px] py-[13px] shadow-[0_5px_15px_rgba(15,23,42,0.035)]">
-      {session.avatar ? (
-        <img src={session.avatar} alt="" className="size-10 shrink-0 rounded-full object-cover ring-2 ring-white" />
+      {session.avatarUrl ? (
+        <img src={session.avatarUrl} alt="" className="size-10 shrink-0 rounded-full object-cover ring-2 ring-white" />
       ) : (
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700 ring-2 ring-white">{getInitials(session.name)}</span>
+        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700 ring-2 ring-white">{session.initials}</span>
       )}
       <div className="min-w-0 flex-1">
         <div>
-          <h3 className="truncate text-[16px] font-semibold leading-5 text-slate-950">{session.name}</h3>
-          <p className="mt-1 inline-flex items-center gap-1.5 text-[12px] font-medium leading-4 text-slate-500">
-            <span className={cx("size-1.5 rounded-full", statusTone.dot)} />
-            {session.status}
+          <h3 className="truncate text-[16px] font-semibold leading-5 text-slate-950">{session.patientName}</h3>
+          <p className="mt-1 flex min-w-0 items-center gap-x-1.5 overflow-hidden text-[12px] font-medium leading-4 text-slate-500">
+            <span className={cx("size-1.5 shrink-0 rounded-full", statusTone.dot)} />
+            <span className="shrink-0">{session.status}</span>
+            {sessionDateTime && (
+              <>
+                <span className="shrink-0 text-slate-300" aria-hidden="true">
+                  &bull;
+                </span>
+                <span className="truncate whitespace-nowrap text-[11px] text-slate-400">{sessionDateTime}</span>
+              </>
+            )}
           </p>
         </div>
         <div className="mt-2.5 space-y-[5px]">
           <p className="flex items-center gap-1.5 text-[12px] font-medium leading-4 text-slate-500">
-            <span className={cx("size-[7px] rounded-full", getNphiesDotTone(session.nphies))} />
-            NPHIES: <span className={getNphiesTone(session.nphies)}>{session.nphies}</span>
+            <span className={cx("size-[7px] rounded-full", getNphiesDotTone(session.nphiesStatus))} />
+            NPHIES: <span className={getNphiesTone(session.nphiesStatus)}>{session.nphiesStatus}</span>
           </p>
-          {session.refId && <p className="text-[11px] font-medium leading-[15px] text-slate-500">Ref ID: {session.refId}</p>}
+          {session.referenceId && <p className="text-[11px] font-medium leading-[15px] text-slate-500">Ref ID: {session.referenceId}</p>}
         </div>
       </div>
       <ChevronRightIcon className="size-4 shrink-0 text-slate-300" />
@@ -576,289 +526,7 @@ function SessionCard({ session }: { session: SessionRecord }) {
   );
 }
 
-function Modal({ title, subtitle, children, footer, onClose }: { title: string; subtitle: string; children: ReactNode; footer: ReactNode; onClose: () => void }) {
-  const modalRef = useRef<HTMLDivElement>(null);
-  const titleId = useMemo(() => `modal-title-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, [title]);
-
-  useEffect(() => {
-    const previousActiveElement = document.activeElement as HTMLElement | null;
-    const firstFocusable = getFocusableElements(modalRef.current)[0];
-    firstFocusable?.focus();
-
-    const handleEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-
-    document.addEventListener("keydown", handleEscape);
-
-    return () => {
-      document.removeEventListener("keydown", handleEscape);
-      previousActiveElement?.focus();
-    };
-  }, [onClose]);
-
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key !== "Tab") {
-      return;
-    }
-
-    const focusable = getFocusableElements(modalRef.current);
-    if (!focusable.length) {
-      return;
-    }
-
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-40 flex items-center justify-center bg-slate-950/28 px-4 py-6 backdrop-blur-[3px]" role="presentation">
-      <div
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onKeyDown={handleKeyDown}
-        className="max-h-[calc(100vh-48px)] w-full max-w-[560px] overflow-auto rounded-[14px] border border-slate-200 bg-white shadow-[0_28px_90px_rgba(15,23,42,0.2)]"
-      >
-        <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-4">
-          <div>
-            <h2 id={titleId} className="text-lg font-extrabold text-slate-950">
-              {title}
-            </h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">{subtitle}</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close modal" className="grid size-8 shrink-0 place-items-center rounded-full text-slate-400 transition hover:bg-slate-50 hover:text-slate-700">
-            <XIcon className="size-4" />
-          </button>
-        </div>
-
-        <div className="px-5 py-5">{children}</div>
-        <div className="flex flex-col-reverse gap-2 border-t border-slate-100 px-5 py-4 sm:flex-row sm:justify-end">{footer}</div>
-      </div>
-    </div>
-  );
-}
-
-function FormInput({
-  id,
-  label,
-  value,
-  onChange,
-  type = "text",
-  error,
-  helperText,
-  icon,
-  max,
-  autoComplete,
-}: {
-  id: keyof PatientDetails;
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-  error?: string;
-  helperText?: string;
-  icon?: ReactNode;
-  max?: string;
-  autoComplete?: string;
-}) {
-  const errorId = `${id}-error`;
-  const helperId = `${id}-helper`;
-
-  return (
-    <div>
-      <label htmlFor={id} className="text-sm font-extrabold text-slate-800">
-        {label}
-      </label>
-      <div className="relative mt-1.5">
-        <input
-          id={id}
-          name={id}
-          type={type}
-          value={value}
-          max={max}
-          autoComplete={autoComplete}
-          aria-invalid={Boolean(error)}
-          aria-describedby={cx(error ? errorId : null, helperText ? helperId : null) || undefined}
-          onChange={(event) => onChange(event.target.value)}
-          className={cx(
-            "h-11 w-full rounded-[10px] border bg-white px-3 text-sm font-semibold text-slate-900 shadow-sm transition placeholder:text-slate-400",
-            icon ? "pr-10" : "",
-            error ? "border-rose-300 focus:border-rose-400" : "border-slate-200 focus:border-indigo-300",
-          )}
-        />
-        {icon && <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">{icon}</span>}
-      </div>
-      {helperText && (
-        <p id={helperId} className="mt-1.5 text-xs font-medium text-slate-500">
-          {helperText}
-        </p>
-      )}
-      {error && (
-        <p id={errorId} className="mt-1.5 text-xs font-bold text-rose-600">
-          {error}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function SignatureCanvas({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isDrawingRef = useRef(false);
-  const hasSignatureRef = useRef(Boolean(value));
-
-  const resizeCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      return;
-    }
-
-    const rect = canvas.getBoundingClientRect();
-    const ratio = window.devicePixelRatio || 1;
-    canvas.width = Math.floor(rect.width * ratio);
-    canvas.height = Math.floor(rect.height * ratio);
-
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-
-    context.setTransform(ratio, 0, 0, ratio, 0, 0);
-    context.lineCap = "round";
-    context.lineJoin = "round";
-    context.lineWidth = 2.25;
-    context.strokeStyle = "#17203d";
-  }, []);
-
-  useEffect(() => {
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-
-    return () => window.removeEventListener("resize", resizeCanvas);
-  }, [resizeCanvas]);
-
-  const getPosition = (event: PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    const rect = canvas?.getBoundingClientRect();
-    return {
-      x: event.clientX - (rect?.left ?? 0),
-      y: event.clientY - (rect?.top ?? 0),
-    };
-  };
-
-  const beginDrawing = (event: PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context) {
-      return;
-    }
-
-    event.preventDefault();
-    canvas.setPointerCapture(event.pointerId);
-    const position = getPosition(event);
-    context.beginPath();
-    context.moveTo(position.x, position.y);
-    isDrawingRef.current = true;
-  };
-
-  const draw = (event: PointerEvent<HTMLCanvasElement>) => {
-    const context = canvasRef.current?.getContext("2d");
-    if (!context || !isDrawingRef.current) {
-      return;
-    }
-
-    event.preventDefault();
-    const position = getPosition(event);
-    context.lineTo(position.x, position.y);
-    context.stroke();
-    hasSignatureRef.current = true;
-  };
-
-  const stopDrawing = (event: PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas || !isDrawingRef.current) {
-      return;
-    }
-
-    isDrawingRef.current = false;
-    if (hasSignatureRef.current) {
-      onChange(canvas.toDataURL("image/png"));
-    }
-
-    if (canvas.hasPointerCapture(event.pointerId)) {
-      canvas.releasePointerCapture(event.pointerId);
-    }
-  };
-
-  const clearCanvas = () => {
-    const canvas = canvasRef.current;
-    const context = canvas?.getContext("2d");
-    if (!canvas || !context) {
-      return;
-    }
-
-    context.clearRect(0, 0, canvas.width, canvas.height);
-    hasSignatureRef.current = false;
-    onChange("");
-  };
-
-  return (
-    <section aria-label="Patient signature" className="space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-extrabold text-slate-800">Patient Signature</h3>
-        <button type="button" onClick={clearCanvas} className="inline-flex h-8 items-center gap-1.5 rounded-[9px] border border-slate-200 bg-white px-2.5 text-xs font-extrabold text-slate-600 transition hover:bg-slate-50">
-          <EraserIcon className="size-3.5" />
-          Clear
-        </button>
-      </div>
-
-      <div className="relative min-h-[238px] overflow-hidden rounded-[12px] border border-dashed border-slate-300 bg-slate-50/45">
-        {!value && (
-          <div className="pointer-events-none absolute inset-0 grid place-items-center text-slate-300">
-            <SignatureIcon className="size-16" />
-          </div>
-        )}
-        <canvas
-          ref={canvasRef}
-          aria-label="Signature canvas"
-          className="h-[238px] w-full touch-none"
-          onPointerDown={beginDrawing}
-          onPointerMove={draw}
-          onPointerUp={stopDrawing}
-          onPointerCancel={stopDrawing}
-          onPointerLeave={stopDrawing}
-        />
-      </div>
-      {!value && <p className="text-xs font-semibold text-slate-500">Signature is required to continue.</p>}
-    </section>
-  );
-}
-
-function getFocusableElements(container: HTMLElement | null) {
-  if (!container) {
-    return [];
-  }
-
-  return Array.from(
-    container.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    ),
-  ).filter((element) => !element.hasAttribute("disabled") && element.tabIndex !== -1);
-}
-
-function getStatusTone(status: SessionStatus) {
+function getStatusTone(status: GCCUpcomingSession["status"]) {
   switch (status) {
     case "Active":
       return { badge: "bg-emerald-50 text-emerald-700", dot: "bg-emerald-500" };
@@ -873,25 +541,29 @@ function getStatusTone(status: SessionStatus) {
   }
 }
 
-function getNphiesTone(status: NphiesStatus) {
+function getNphiesTone(status: GCCUpcomingSession["nphiesStatus"]) {
   switch (status) {
     case "Cleared":
     case "Verified":
       return "text-emerald-700";
     case "Queued":
       return "text-amber-700";
+    case "Pending":
+      return "text-indigo-600";
     case "Inactive":
       return "text-slate-500";
   }
 }
 
-function getNphiesDotTone(status: NphiesStatus) {
+function getNphiesDotTone(status: GCCUpcomingSession["nphiesStatus"]) {
   switch (status) {
     case "Cleared":
     case "Verified":
       return "bg-emerald-500";
     case "Queued":
       return "bg-amber-500";
+    case "Pending":
+      return "bg-indigo-400";
     case "Inactive":
       return "bg-slate-400";
   }
@@ -951,39 +623,6 @@ function ArrowRightIcon({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
       <path d="M5 12h14M13 6l6 6-6 6" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
-    </svg>
-  );
-}
-
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
-    </svg>
-  );
-}
-
-function CalendarIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <path d="M7 3v3M17 3v3M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function EraserIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" className={className} aria-hidden="true">
-      <path d="m16 4 5 5-9 9H7l-4-4 9-9a3 3 0 0 1 4 0ZM7 18h14" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
-    </svg>
-  );
-}
-
-function SignatureIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 80 80" className={className} aria-hidden="true">
-      <path d="M16 50c10-18 15-18 16-8 2 18 12 2 15-8 3-11 8-10 9 0 1 12 6 15 12 7" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="4" />
-      <path d="M14 61h52" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="4" />
     </svg>
   );
 }
