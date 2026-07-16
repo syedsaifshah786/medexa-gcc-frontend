@@ -38,7 +38,7 @@ export default function GCCSoapReviewCard({ soapNote, isLoading, errorMessage, o
   const hasData = Boolean(soapNote);
 
   return (
-    <GCCReviewCardFrame title={t("review.soap.cardTitle")} isEditing={isEditing} onEditToggle={() => setDraft({ ...activeDraft, isEditing: !isEditing })} minHeightClass="min-h-[650px]" editDisabled={!hasData}>
+    <GCCReviewCardFrame title={soapNote?.section_title ?? t("review.soap.cardTitle")} isEditing={isEditing} onEditToggle={() => setDraft({ ...activeDraft, isEditing: !isEditing })} minHeightClass="min-h-[650px]" editDisabled={!hasData}>
       {isLoading ? (
         <ReviewLoadingState />
       ) : errorMessage ? (
@@ -48,18 +48,18 @@ export default function GCCSoapReviewCard({ soapNote, isLoading, errorMessage, o
       ) : (
         <div className="space-y-6">
           <section>
-            <h3 className="text-[18px] font-semibold leading-6 text-[#080B3A]">{t("review.soap.patientNarrative")}</h3>
-            {soapNote.subjective.chief_complaint && <p dir="auto" className="mt-4 text-[13px] font-semibold uppercase tracking-[0.06em] text-[#697085]">{soapNote.subjective.chief_complaint}</p>}
+            <h3 className="text-[18px] font-semibold leading-6 text-[#080B3A]">{soapNote.narrative_title ?? t("review.soap.patientNarrative")}</h3>
+            {soapNote.subjective.chief_complaint && <p dir="auto" className="mt-5 text-[15px] font-semibold text-[#080B3A]">{soapNote.subjective.chief_complaint}</p>}
             {isEditing ? (
               <textarea
                 value={narrative}
                 onChange={(event) => setDraft({ ...activeDraft, narrative: event.target.value })}
                 aria-label={t("review.soap.narrativeInputAria")}
                 dir="auto"
-                className="mt-2 min-h-[142px] w-full resize-none rounded-[15px] border border-[#C7D8F8] bg-[#F5FAFF] p-[18px] text-[15px] font-medium leading-7 text-[#212332] outline-none transition focus:border-[#5B61F6] focus:ring-4 focus:ring-[#5B61F6]/10"
+                className="mt-3 min-h-[104px] w-full resize-none rounded-[15px] border border-[#C7D8F8] bg-[#F8FBFF] px-5 py-4 text-[15px] font-normal leading-6 text-[#30323a] outline-none transition focus:border-[#5B61F6] focus:ring-4 focus:ring-[#5B61F6]/10"
               />
             ) : narrative ? (
-              <div dir="auto" className="mt-2 whitespace-pre-line rounded-[15px] border border-[#C7D8F8] bg-[#F5FAFF] p-[18px] text-[15px] font-medium leading-7 text-[#212332]">
+              <div dir="auto" className="mt-3 whitespace-pre-line rounded-[15px] border border-[#C7D8F8] bg-[#F8FBFF] px-5 py-4 text-[15px] font-normal leading-6 text-[#30323a]">
                 {narrative}
               </div>
             ) : (
@@ -69,11 +69,11 @@ export default function GCCSoapReviewCard({ soapNote, isLoading, errorMessage, o
 
           {symptoms.length > 0 && (
             <section>
-              <h3 className="text-[18px] font-semibold leading-6 text-[#080B3A]">{t("review.soap.symptoms")}</h3>
+              <h3 className="text-[18px] font-semibold leading-6 text-[#080B3A]">{soapNote.symptoms_title ?? t("review.soap.symptoms")}</h3>
               <div className="mt-3 space-y-3">
                 {symptoms.map((symptom, index) => (
-                  <div key={`symptom-${index}`} className="flex items-center gap-3 rounded-[15px] border border-[#E0E7F6] bg-[#F8FBFF] px-4 py-3">
-                    <span className="size-2.5 shrink-0 rounded-full bg-[#F4B942]" />
+                  <div key={`symptom-${index}`} className="flex min-h-[64px] items-center gap-3 rounded-[15px] border border-[#EEF0F5] bg-[#F7F9FB] px-5 py-3">
+                    <span className="size-1.5 shrink-0 rounded-full bg-[#F4AD18]" />
                     {isEditing ? (
                       <input
                         value={symptom}
@@ -93,7 +93,7 @@ export default function GCCSoapReviewCard({ soapNote, isLoading, errorMessage, o
 
           {(history || isEditing) && (
             <section>
-              <h3 className="text-[18px] font-semibold leading-6 text-[#080B3A]">{t("review.soap.history")}</h3>
+              <h3 className="text-[18px] font-semibold leading-6 text-[#080B3A]">{soapNote.history_title ?? t("review.soap.history")}</h3>
               {isEditing ? (
                 <textarea
                   value={history}

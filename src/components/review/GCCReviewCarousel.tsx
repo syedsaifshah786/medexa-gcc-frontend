@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import ReviewSuccessModal from "@/components/gcc/ReviewSuccessModal";
 import GCCBillingReviewCard from "@/components/review/GCCBillingReviewCard";
 import GCCPatientSummaryCard from "@/components/review/GCCPatientSummaryCard";
-import GCCReviewActions from "@/components/review/GCCReviewActions";
+import GCCReviewActions, { type GCCSendDestination } from "@/components/review/GCCReviewActions";
 import GCCReviewShell from "@/components/review/GCCReviewShell";
 import GCCSoapReviewCard from "@/components/review/GCCSoapReviewCard";
 import { useGCCLocale } from "@/hooks/useGCCLocale";
@@ -78,7 +78,6 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
   const [cardWidth, setCardWidth] = useState(0);
   const [reducedMotion, setReducedMotion] = useState(false);
   const [toastKey, setToastKey] = useState("");
-  const [patientCompleted, setPatientCompleted] = useState(false);
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState(false);
   const isReviewLoading = reviewStatus === "loading";
   const isReviewReady = reviewStatus === "ready" && Boolean(soapNote && billingIntelligence && patientSummary);
@@ -96,9 +95,9 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
     () => [
       <GCCSoapReviewCard key="soap" soapNote={soapNote} isLoading={isReviewLoading} errorMessage={cardError} onRetry={refresh} />,
       <GCCBillingReviewCard key="billing" billingIntelligence={billingIntelligence} isLoading={isReviewLoading} errorMessage={cardError} onRetry={refresh} />,
-      <GCCPatientSummaryCard key="summary" patientSummary={patientSummary} isLoading={isReviewLoading} errorMessage={cardError} onRetry={refresh} completed={patientCompleted} />,
+      <GCCPatientSummaryCard key="summary" patientSummary={patientSummary} isLoading={isReviewLoading} errorMessage={cardError} onRetry={refresh} />,
     ],
-    [billingIntelligence, cardError, isReviewLoading, patientCompleted, patientSummary, refresh, soapNote],
+    [billingIntelligence, cardError, isReviewLoading, patientSummary, refresh, soapNote],
   );
   const visualCards = useMemo(() => {
     const entries = cards.map((card, semanticIndex) => ({ card, semanticIndex: semanticIndex as ReviewSlideIndex }));
@@ -174,7 +173,6 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
     const handlePopState = () => {
       const routeIndex = getRouteIndex(window.location.pathname);
       if (routeIndex === activeIndexRef.current) return;
-      setPatientCompleted(false);
       setIsSuccessModalOpen(false);
       setIsDragging(false);
       setDragOffset(0);
@@ -191,7 +189,6 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
     (nextIndex: number) => {
       const clampedIndex = Math.min(routes.length - 1, Math.max(0, nextIndex)) as ReviewSlideIndex;
       if (clampedIndex === activeIndexRef.current) return;
-      setPatientCompleted(false);
       setIsSuccessModalOpen(false);
       setIsDragging(false);
       window.requestAnimationFrame(() => {
@@ -297,7 +294,8 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
     }
   };
 
-  const handleSend = () => {
+  const handleSend = (destination: GCCSendDestination) => {
+    void destination;
     if (!isReviewReady) return;
 
     if (activeIndex < routes.length - 1) {
@@ -305,7 +303,6 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
       return;
     }
 
-    setPatientCompleted(true);
     setIsSuccessModalOpen(true);
   };
 
@@ -397,7 +394,13 @@ export default function GCCReviewCarousel({ initialStep }: GCCReviewCarouselProp
         </div>
       </section>
 
-      <GCCReviewActions onExport={handleExport} onSend={handleSend} disabled={!isReviewReady} />
+      <GCCReviewActions
+        key={activeIndex}
+        onExport={handleExport}
+        onSend={handleSend}
+        disabled={!isReviewReady}
+        enableSendDestinations={activeIndex === 2}
+      />
       {toastKey && <ReviewToast message={t(toastKey)} />}
       {isSuccessModalOpen && (
         <ReviewSuccessModal

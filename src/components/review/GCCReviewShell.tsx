@@ -51,7 +51,7 @@ export default function GCCReviewShell({ title, subtitle, step, children }: GCCR
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-[34px] font-medium leading-[40px] text-[#080B3A] sm:text-[42px] sm:leading-[48px]">{title}</h1>
-              <MagicWandIcon className="size-7 shrink-0 text-[#5B61F6]" />
+              <MagicWandIcon className="size-7 shrink-0 text-[#179cf0]" />
             </div>
             <p className="mt-2 max-w-[650px] text-[16px] font-medium leading-6 text-[#4F5668] sm:text-[18px]">{subtitle}</p>
           </div>

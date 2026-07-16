@@ -3,6 +3,10 @@ import { buildFinalTranscript, normalizeTranscript } from "@/lib/gcc/transcript-
 import type { GCCLocale } from "@/i18n/types";
 
 export type GCCSoapNote = {
+  section_title?: string;
+  narrative_title?: string;
+  symptoms_title?: string;
+  history_title?: string;
   subjective: {
     chief_complaint: string;
     patient_narrative: string;
@@ -49,6 +53,10 @@ export type GCCBillingSessionItem = {
 };
 
 export type GCCBillingIntelligence = {
+  section_title?: string;
+  session_items_title?: string;
+  revenue_title?: string;
+  denial_loop_title?: string;
   session_items: GCCBillingSessionItem[];
   dx_support_confidence: number | null;
   claims_readiness: number | null;
@@ -63,6 +71,9 @@ export type GCCCarePlanItem = {
 };
 
 export type GCCPatientSummary = {
+  section_title?: string;
+  key_improvement_title?: string;
+  upcoming_care_plan_title?: string;
   intro: string;
   session_number: number | null;
   total_sessions: number | null;
@@ -73,6 +84,8 @@ export type GCCPatientSummary = {
   upcoming_care_plan: GCCCarePlanItem[];
   closing_message: string;
   clinician_review_required: boolean;
+  session_details_prefix?: string;
+  session_details_suffix?: string;
 };
 
 export type GCCReviewBundle = {

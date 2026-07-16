@@ -2,6 +2,11 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
+import { GCC_REVIEW_DEMO_MODE } from "@/config/gcc-demo-mode";
+import {
+  createGCCDemoReviewBundle,
+  saveGCCDemoReviewBundleLocally,
+} from "@/data/gcc-demo-review-bundle";
 import { useGCCLocale } from "@/hooks/useGCCLocale";
 import {
   buildFinalTranscript,
@@ -536,15 +541,31 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
         throw new Error("FINALIZE_INCOMPLETE");
       }
 
-      const reviewBundle = buildReviewBundleFromFinalizeResponse(response, locale);
+      const backendReviewBundle = buildReviewBundleFromFinalizeResponse(response, locale);
+      const reviewBundle = GCC_REVIEW_DEMO_MODE
+        ? createGCCDemoReviewBundle({
+            sessionId: id,
+            locale,
+            transcript,
+            elapsedMs: frozenElapsed,
+          })
+        : backendReviewBundle;
       saveReviewBundleLocally(reviewBundle, locale);
+      if (GCC_REVIEW_DEMO_MODE) {
+        saveGCCDemoReviewBundleLocally({
+          sessionId: id,
+          locale,
+          transcript,
+          elapsedMs: frozenElapsed,
+        });
+      }
       saveSoapLocally({
         sessionId: id,
-        soapNote: response.review_bundle.soap_note,
+        soapNote: reviewBundle.soapNote,
         elapsedMs: frozenElapsed,
         transcript,
-        llmUsed: response.llm_used,
-        fallbackReason: response.fallback_reason,
+        llmUsed: GCC_REVIEW_DEMO_MODE ? false : response.llm_used,
+        fallbackReason: GCC_REVIEW_DEMO_MODE ? null : response.fallback_reason,
         locale,
       });
       setSafeStatus("stopped");

@@ -73,7 +73,6 @@ function GCCSessionPageContent() {
   const isRecording = status === "recording";
   const isPaused = status === "paused";
   const isFinalizing = status === "stopping";
-  const hasTranscript = Boolean(finalTranscript.trim() || interimTranscript.trim() || transcriptSegments.length);
   const liveInsights = useGCCLiveInsights({
     locale,
     sessionId,
@@ -184,13 +183,7 @@ function GCCSessionPageContent() {
             </div>
           </div>
 
-          <GCCClaimQualityDropdown
-            readiness={liveInsights.claimReadiness}
-            insightStatus={liveInsights.status}
-            sessionStatus={status}
-            lastUpdatedAt={liveInsights.lastUpdatedAt}
-            transcriptSegmentCount={transcriptSegments.length}
-          />
+          <GCCClaimQualityDropdown />
         </section>
 
         <div className="mx-auto w-full max-w-[820px]">
@@ -232,15 +225,7 @@ function GCCSessionPageContent() {
               formatTimestamp={formatElapsedTime}
               highlights={transcriptHighlights}
             />
-            <GCCInsightsSheet
-              suggestions={liveInsights.suggestions}
-              claimReadiness={liveInsights.claimReadiness}
-              status={liveInsights.status}
-              lastUpdatedAt={liveInsights.lastUpdatedAt}
-              hasTranscript={hasTranscript}
-              onApprove={liveInsights.approveSuggestion}
-              onIgnore={liveInsights.ignoreSuggestion}
-            />
+            <GCCInsightsSheet />
           </div>
         </div>
       </main>

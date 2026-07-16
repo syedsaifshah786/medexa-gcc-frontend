@@ -13,7 +13,7 @@ type SlideActionProps = {
   disabled?: boolean;
 };
 
-const threshold = 0.82;
+const threshold = 0.8;
 
 export default function SlideAction({
   label,
@@ -24,8 +24,7 @@ export default function SlideAction({
   completed: controlledCompleted,
   disabled = false,
 }: SlideActionProps) {
-  const { direction, t, formatNumber } = useGCCLocale();
-  const isRtl = direction === "rtl";
+  const { t, formatNumber } = useGCCLocale();
   const trackRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
   const startXRef = useRef(0);
@@ -84,10 +83,9 @@ export default function SlideAction({
     const currentTravelDistance = measureTravelDistance();
     if (currentTravelDistance <= 0) return;
 
-    const directionMultiplier = isRtl ? -1 : 1;
     updateProgress(
       startProgressRef.current +
-        ((event.clientX - startXRef.current) * directionMultiplier) /
+        (event.clientX - startXRef.current) /
           currentTravelDistance,
     );
   };
@@ -100,7 +98,7 @@ export default function SlideAction({
     setIsDragging(false);
     restoreTextSelection();
 
-    if (progressRef.current >= threshold) {
+    if (progressRef.current > threshold) {
       updateProgress(1);
       finish();
     } else {
@@ -151,9 +149,9 @@ export default function SlideAction({
       event.preventDefault();
       const isForward =
         event.key === "ArrowUp" ||
-        (isRtl ? event.key === "ArrowLeft" : event.key === "ArrowRight");
+        event.key === "ArrowRight";
       const nextProgress = progressRef.current + (isForward ? 1 : -1) * 0.1;
-      if (nextProgress >= threshold) {
+      if (nextProgress > threshold) {
         finish();
       } else {
         updateProgress(nextProgress);
@@ -185,7 +183,7 @@ export default function SlideAction({
   return (
     <div
       ref={trackRef}
-      dir={direction}
+      dir="ltr"
       role="slider"
       tabIndex={completed || disabled ? -1 : 0}
       aria-label={t("session.slider.dragToConfirm", { label })}
@@ -233,7 +231,7 @@ export default function SlideAction({
           completed ? "cursor-default border-white bg-white text-emerald-600" : "cursor-grab border-indigo-100 bg-white text-[#001bd1] active:cursor-grabbing"
         } ${disabled ? "cursor-not-allowed" : ""} ${isDragging ? "" : "transition-transform duration-300 ease-out"}`}
         style={{
-          transform: `translateX(${(isRtl ? -1 : 1) * displayedProgress * Math.max(0, travelDistance)}px)`,
+          transform: `translateX(${displayedProgress * Math.max(0, travelDistance)}px)`,
           touchAction: "none",
         }}
       >
@@ -245,7 +243,6 @@ export default function SlideAction({
           <svg
             viewBox="0 0 24 24"
             className="size-5"
-            style={{ transform: isRtl ? "scaleX(-1)" : undefined }}
             aria-hidden="true"
           >
             <path d="M6.5 12h11m-4-4 4 4-4 4" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
