@@ -4,6 +4,7 @@ import { Suspense, useEffect, useMemo } from "react";
 import { AlertCircle, ArrowLeft, BadgeCheck, CheckCircle2, RotateCcw, UserRound } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import GCCClaimQualityDropdown from "@/components/gcc/GCCClaimQualityDropdown";
+import GCCDemoTranscriptPanel from "@/components/gcc/GCCDemoTranscriptPanel";
 import GCCHeader from "@/components/gcc/GCCHeader";
 import GCCInsightsSheet from "@/components/gcc/GCCInsightsSheet";
 import GCCSessionHero from "@/components/gcc/GCCSessionHero";
@@ -37,6 +38,7 @@ function GCCSessionPageContent() {
     pauseSession,
     resumeSession,
     stopSession,
+    appendManualDemoTranscriptLine,
     retryFinalize,
     setSessionPatient,
   } = useGCCVoiceSession();
@@ -224,6 +226,11 @@ function GCCSessionPageContent() {
               status={status}
               formatTimestamp={formatElapsedTime}
               highlights={transcriptHighlights}
+            />
+            <GCCDemoTranscriptPanel
+              status={status}
+              segments={transcriptSegments}
+              onAppendLine={appendManualDemoTranscriptLine}
             />
             <GCCInsightsSheet />
           </div>

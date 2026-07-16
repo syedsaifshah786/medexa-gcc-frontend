@@ -7,6 +7,7 @@ import {
   createGCCDemoReviewBundle,
   saveGCCDemoReviewBundleLocally,
 } from "@/data/gcc-demo-review-bundle";
+import type { GCCDemoTranscriptLine } from "@/data/gcc-demo-session-transcript";
 import { useGCCLocale } from "@/hooks/useGCCLocale";
 import {
   buildFinalTranscript,
@@ -28,6 +29,9 @@ export type TranscriptSegment = {
   timestampMs: number;
   isFinal: boolean;
   confidence?: number;
+  speaker?: "clinician" | "patient";
+  speakerLabel?: string;
+  source?: "web-speech" | "manual-demo";
 };
 
 export type GCCSessionPatient = {
@@ -74,6 +78,7 @@ type GCCVoiceSessionContextValue = {
   pauseSession: () => void;
   resumeSession: () => void;
   stopSession: () => Promise<void>;
+  appendManualDemoTranscriptLine: (line: GCCDemoTranscriptLine) => boolean;
   restartRecognition: () => void;
   clearSession: () => void;
   formatElapsedTime: (value?: number) => string;
@@ -456,6 +461,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       timestampMs: calculateElapsed(),
       isFinal: true,
       confidence,
+      source: "web-speech",
     };
     const nextSegments = [...transcriptSegmentsRef.current, segment];
     transcriptSegmentsRef.current = nextSegments;
@@ -465,6 +471,37 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     interimTranscriptRef.current = "";
     setInterimTranscript("");
     persistSession({ transcriptSegments: nextSegments, finalTranscript: finalTranscriptRef.current });
+  }, [calculateElapsed, persistSession]);
+
+  const appendManualDemoTranscriptLine = useCallback((line: GCCDemoTranscriptLine) => {
+    if (statusRef.current !== "recording" || !sessionIdRef.current) return false;
+    const cleanText = line.text.trim();
+    if (!cleanText) return false;
+    if (
+      transcriptSegmentsRef.current.some(
+        (segment) => segment.id === line.id && segment.source === "manual-demo",
+      )
+    ) {
+      return false;
+    }
+
+    const segment: TranscriptSegment = {
+      id: line.id,
+      speaker: line.speaker,
+      speakerLabel: line.speakerLabel,
+      text: cleanText,
+      isFinal: true,
+      source: "manual-demo",
+      timestampMs: calculateElapsed(),
+    };
+    const nextSegments = [...transcriptSegmentsRef.current, segment];
+    const labeledText = `${line.speakerLabel}: ${cleanText}`;
+    transcriptSegmentsRef.current = nextSegments;
+    finalTranscriptRef.current = [finalTranscriptRef.current, labeledText].filter(Boolean).join(" ");
+    setTranscriptSegments(nextSegments);
+    setFinalTranscript(finalTranscriptRef.current);
+    persistSession({ transcriptSegments: nextSegments, finalTranscript: finalTranscriptRef.current });
+    return true;
   }, [calculateElapsed, persistSession]);
 
   const flushRecognitionBeforeFinalize = useCallback(async () => {
@@ -985,6 +1022,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       pauseSession,
       resumeSession,
       stopSession,
+      appendManualDemoTranscriptLine,
       restartRecognition,
       clearSession,
       formatElapsedTime: (valueToFormat = elapsedMs) => formatDuration(valueToFormat),
@@ -997,6 +1035,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       setSessionPatient,
     }),
     [
+      appendManualDemoTranscriptLine,
       clearSession,
       elapsedMs,
       enableVoiceControl,

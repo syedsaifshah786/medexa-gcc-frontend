@@ -159,7 +159,16 @@ export default function GCCTranscript({
         {hasTranscript ? (
           <div role="log" aria-live="polite" aria-relevant="additions" className="space-y-5 sm:space-y-6">
             {finalizedSegments.map((segment) => {
-              const line = parseTranscriptLine(segment.text, t("session.transcript.speaker.session"));
+              const line = segment.source === "manual-demo" && segment.speaker
+                ? {
+                    speaker: t(
+                      segment.speaker === "clinician"
+                        ? "session.demoTranscript.clinician"
+                        : "session.demoTranscript.patient",
+                    ),
+                    text: segment.text,
+                  }
+                : parseTranscriptLine(segment.text, t("session.transcript.speaker.session"));
               return (
                 <article key={segment.id} className="grid grid-cols-[48px_minmax(0,1fr)] items-start gap-3 sm:grid-cols-[54px_minmax(0,1fr)] sm:gap-4">
                   <time dir="ltr" className="pt-0.5 text-[12px] font-normal tabular-nums text-slate-400 sm:text-[13px]">
