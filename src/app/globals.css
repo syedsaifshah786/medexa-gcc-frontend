@@ -214,7 +214,7 @@ select:focus-visible,
   animation: gcc-suggestion-enter 260ms ease-out both;
 }
 
-.gcc-demo-transcript-line {
+.gcc-live-transcript-line {
   animation: gcc-suggestion-enter 260ms ease-out both;
 }
 
@@ -265,7 +265,7 @@ select:focus-visible,
   }
 
   .gcc-live-suggestion,
-  .gcc-demo-transcript-line {
+  .gcc-live-transcript-line {
     animation: none;
     transition: none;
   }

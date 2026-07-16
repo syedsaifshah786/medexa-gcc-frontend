@@ -22,6 +22,7 @@ export type SessionStatus = "idle" | "command-listening" | "starting" | "recordi
 export type PermissionState = "unknown" | "prompt" | "granted" | "denied";
 export type RecognitionMode = "off" | "ambient-command" | "session-transcription" | "paused-command-only";
 export type SessionSource = "voice" | "manual" | "restored";
+export type SessionInputMode = "web-speech" | "manual-demo";
 
 export type TranscriptSegment = {
   id: string;
@@ -47,6 +48,7 @@ type PersistedVoiceSession = {
   transcriptSegments: TranscriptSegment[];
   elapsedMs: number;
   source?: SessionSource;
+  inputMode?: SessionInputMode;
   startedAt?: number | null;
   patient?: GCCSessionPatient;
 };
@@ -56,6 +58,7 @@ export type StartSessionOptions = {
   sessionId?: string;
   preserveTranscript?: boolean;
   patient?: GCCSessionPatient;
+  inputMode?: SessionInputMode;
 };
 
 type GCCVoiceSessionContextValue = {
@@ -139,6 +142,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   const statusRef = useRef<SessionStatus>("idle");
   const sessionIdRef = useRef<string | null>(null);
   const sessionPatientRef = useRef<GCCSessionPatient | null>(null);
+  const sessionInputModeRef = useRef<SessionInputMode>("web-speech");
   const finalTranscriptRef = useRef("");
   const interimTranscriptRef = useRef("");
   const commandCooldownRef = useRef(0);
@@ -194,6 +198,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       elapsedMs: accumulatedMsRef.current + (sessionStartedAtRef.current ? performance.now() - sessionStartedAtRef.current : 0),
       startedAt: sessionStartedAtRef.current,
       patient: sessionPatientRef.current ?? undefined,
+      inputMode: sessionInputModeRef.current,
       ...override,
     };
     window.sessionStorage.setItem(storageKey, JSON.stringify(payload));
@@ -656,9 +661,14 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     interimTranscriptRef.current = "";
     setInterimTranscript("");
     setSafeStatus("paused");
-    startRecognition("paused-command-only");
+    if (sessionInputModeRef.current === "manual-demo") {
+      modeRef.current = "off";
+      safeStopRecognition("abort");
+    } else {
+      startRecognition("paused-command-only");
+    }
     persistSession({ status: "paused", elapsedMs: frozenElapsed });
-  }, [calculateElapsed, persistSession, setSafeStatus, startRecognition, stopTimerInterval]);
+  }, [calculateElapsed, persistSession, safeStopRecognition, setSafeStatus, startRecognition, stopTimerInterval]);
 
   const resumeSession = useCallback(() => {
     if (statusRef.current === "recording") return;
@@ -671,13 +681,19 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     setStartedAt(Date.now());
     setSafeStatus("recording");
     startTimerInterval();
-    startRecognition("session-transcription");
+    if (sessionInputModeRef.current === "manual-demo") {
+      modeRef.current = "off";
+      safeStopRecognition("abort");
+    } else {
+      startRecognition("session-transcription");
+    }
     persistSession({ status: "recording" });
-  }, [persistSession, setSafeStatus, startRecognition, startTimerInterval]);
+  }, [persistSession, safeStopRecognition, setSafeStatus, startRecognition, startTimerInterval]);
 
   const clearSession = useCallback(() => {
     sessionIdRef.current = null;
     sessionPatientRef.current = null;
+    sessionInputModeRef.current = "web-speech";
     setSessionId(null);
     finalTranscriptRef.current = "";
     interimTranscriptRef.current = "";
@@ -706,7 +722,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   }, [setSafeStatus]);
 
   const startSession = useCallback(async (options?: StartSessionOptions) => {
-    if (!(await enableVoiceControl())) {
+    const inputMode = options?.inputMode ?? "web-speech";
+    if (inputMode === "web-speech" && !(await enableVoiceControl())) {
       return null;
     }
 
@@ -714,6 +731,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     finalizingRef.current = false;
     stoppedRef.current = false;
     sessionIdRef.current = id;
+    sessionInputModeRef.current = inputMode;
     if (options?.patient) {
       sessionPatientRef.current = options.patient;
     }
@@ -734,15 +752,26 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     setStartedAt(Date.now());
     setSafeStatus("recording");
     startTimerInterval();
-    startRecognition("session-transcription");
+    if (inputMode === "manual-demo") {
+      modeRef.current = "off";
+      safeStopRecognition("abort");
+      interimTranscriptRef.current = "";
+      latestHeardTextRef.current = "";
+      setInterimTranscript("");
+      setLatestHeardText("");
+      setErrorMessage(null);
+    } else {
+      startRecognition("session-transcription");
+    }
     persistSession({
       sessionId: id,
       status: "recording",
       source: options?.source ?? "manual",
+      inputMode,
       patient: sessionPatientRef.current ?? undefined,
     });
     return id;
-  }, [enableVoiceControl, persistSession, setSafeStatus, startRecognition, startTimerInterval]);
+  }, [enableVoiceControl, persistSession, safeStopRecognition, setSafeStatus, startRecognition, startTimerInterval]);
 
   const navigateToSessionFromVoice = useCallback(async () => {
     if (startNavigationInProgressRef.current) return;
@@ -809,6 +838,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   }, [finalizeAndNavigateToSoap, navigateToSessionFromVoice, pauseSession, resumeSession]);
 
   const processRecognitionResult = useCallback((event: SpeechRecognitionEvent) => {
+    if (sessionInputModeRef.current === "manual-demo") return;
+
     for (let index = event.resultIndex; index < event.results.length; index += 1) {
       const result = event.results[index];
       const alternative = getBestAlternative(result);
@@ -874,12 +905,14 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     // task turn, before the clinician can meaningfully interact with controls.
     void Promise.resolve().then(() => {
       if (cancelled || typeof window === "undefined") return;
+      if (statusRef.current === "recording" && sessionIdRef.current) return;
       const saved = window.sessionStorage.getItem(storageKey);
       if (saved) {
         try {
           const parsed = JSON.parse(saved) as PersistedVoiceSession;
           sessionIdRef.current = parsed.sessionId;
           sessionPatientRef.current = parsed.patient ?? null;
+          sessionInputModeRef.current = parsed.inputMode ?? "web-speech";
           finalTranscriptRef.current = parsed.finalTranscript ?? "";
           transcriptSegmentsRef.current = parsed.transcriptSegments ?? [];
           accumulatedMsRef.current = parsed.elapsedMs ?? 0;

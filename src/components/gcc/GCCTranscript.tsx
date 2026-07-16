@@ -156,15 +156,14 @@ export default function GCCTranscript({
         }}
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-1 py-3 [scrollbar-gutter:stable] sm:px-3"
       >
-        {hasTranscript ? (
-          <div role="log" aria-live="polite" aria-relevant="additions" className="space-y-5 sm:space-y-6">
+        <div role="log" aria-live="polite" aria-relevant="additions" className="space-y-5 sm:space-y-6">
             {finalizedSegments.map((segment) => {
               const line = segment.source === "manual-demo" && segment.speaker
                 ? {
                     speaker: t(
                       segment.speaker === "clinician"
-                        ? "session.demoTranscript.clinician"
-                        : "session.demoTranscript.patient",
+                        ? "session.liveTranscript.clinician"
+                        : "session.liveTranscript.patient",
                     ),
                     text: segment.text,
                   }
@@ -194,15 +193,7 @@ export default function GCCTranscript({
                 </div>
               );
             })()}
-          </div>
-        ) : (
-          <div className="grid min-h-full place-items-center px-5 py-8 text-center">
-            <div>
-              <span aria-hidden="true" className="mx-auto mb-3 block size-2 rounded-full bg-indigo-300 shadow-[0_0_0_7px_rgba(165,180,252,0.16)]" />
-              <p className="text-[14px] font-medium text-slate-400">{t("session.transcript.empty")}</p>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </section>
   );

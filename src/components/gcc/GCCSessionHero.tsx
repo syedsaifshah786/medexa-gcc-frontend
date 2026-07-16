@@ -12,17 +12,19 @@ const waveformBars = [
 type GCCSessionHeroProps = {
   timer: string;
   status: SessionStatus;
+  isManualDemo?: boolean;
   onStartRecording: () => void;
   onPauseRecording: () => void;
   onResumeRecording: () => void;
   onStopRecording: () => void | Promise<void>;
 };
 
-function SessionMessage({ status }: { status: SessionStatus }) {
+function SessionMessage({ status, isManualDemo }: { status: SessionStatus; isManualDemo: boolean }) {
   const { t } = useGCCLocale();
 
   switch (status) {
     case "recording":
+      if (isManualDemo) return <>{t("session.hero.manualRecording")}</>;
       return (
         <>
           {t("session.hero.sayPrefix")}{" "}
@@ -44,20 +46,21 @@ function SessionMessage({ status }: { status: SessionStatus }) {
     case "error":
       return <>{t("session.hero.unavailable")}</>;
     default:
-      return <>{t("session.hero.startPrompt")}</>;
+      return <>{t(isManualDemo ? "session.hero.manualRecording" : "session.hero.startPrompt")}</>;
   }
 }
 
 export default function GCCSessionHero({
   timer,
   status,
+  isManualDemo = false,
   onStartRecording,
   onPauseRecording,
   onResumeRecording,
   onStopRecording,
 }: GCCSessionHeroProps) {
   const { t } = useGCCLocale();
-  const isRecording = status === "recording";
+  const isRecording = status === "recording" || (isManualDemo && status === "idle");
   const isPaused = status === "paused";
   const isStarting = status === "starting";
   const isFinalizing = status === "stopping";
@@ -134,7 +137,7 @@ export default function GCCSessionHero({
         </div>
 
         <p aria-live="polite" className="mt-3 min-h-7 text-center text-[15px] font-normal leading-7 text-slate-500 sm:mt-4 sm:text-[16px]">
-          <SessionMessage status={status} />
+          <SessionMessage status={status} isManualDemo={isManualDemo} />
         </p>
 
         <div dir="ltr" className="mt-2 flex w-full max-w-[570px] items-center justify-center gap-4 sm:mt-3 sm:gap-5">

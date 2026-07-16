@@ -1,14 +1,13 @@
 "use client";
 
-import { Suspense, useEffect, useMemo } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { AlertCircle, ArrowLeft, BadgeCheck, CheckCircle2, RotateCcw, UserRound } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import GCCClaimQualityDropdown from "@/components/gcc/GCCClaimQualityDropdown";
-import GCCDemoTranscriptPanel from "@/components/gcc/GCCDemoTranscriptPanel";
+import GCCLiveTranscriptPanel from "@/components/gcc/GCCLiveTranscriptPanel";
 import GCCHeader from "@/components/gcc/GCCHeader";
 import GCCInsightsSheet from "@/components/gcc/GCCInsightsSheet";
 import GCCSessionHero from "@/components/gcc/GCCSessionHero";
-import GCCTranscript from "@/components/gcc/GCCTranscript";
 import { useGCCLocale } from "@/hooks/useGCCLocale";
 import { useGCCLiveInsights } from "@/hooks/useGCCLiveInsights";
 import { useGCCVoiceSession } from "@/hooks/useGCCVoiceSession";
@@ -23,6 +22,7 @@ export default function GCCSessionPage() {
 
 function GCCSessionPageContent() {
   const searchParams = useSearchParams();
+  const hasStartedManualDemoRef = useRef(false);
   const { locale, t, formatNumber, formatSessionProgress } = useGCCLocale();
   const {
     sessionId,
@@ -75,7 +75,7 @@ function GCCSessionPageContent() {
   const isRecording = status === "recording";
   const isPaused = status === "paused";
   const isFinalizing = status === "stopping";
-  const liveInsights = useGCCLiveInsights({
+  useGCCLiveInsights({
     locale,
     sessionId,
     isRecording,
@@ -87,26 +87,22 @@ function GCCSessionPageContent() {
     elapsedMs,
     patient,
   });
-  const transcriptHighlights = useMemo(
-    () => [...new Set(liveInsights.activeSuggestions.map((suggestion) => suggestion.evidence.trim()).filter(Boolean))],
-    [liveInsights.activeSuggestions],
-  );
-
   useEffect(() => {
     setSessionPatient(sessionPatient);
   }, [sessionPatient, setSessionPatient]);
 
   useEffect(() => {
-    if (searchParams.get("autoStart") !== "1") return;
-    if (status === "recording" || status === "paused" || status === "stopping" || status === "stopped") return;
+    if (hasStartedManualDemoRef.current) return;
+    hasStartedManualDemoRef.current = true;
     const requestedSessionId = searchParams.get("sessionId") ?? undefined;
     void startSession({
       sessionId: requestedSessionId,
-      source: searchParams.get("source") === "voice" ? "voice" : "manual",
+      source: "manual",
+      inputMode: "manual-demo",
       preserveTranscript: Boolean(requestedSessionId && requestedSessionId === sessionId),
       patient: sessionPatient,
     });
-  }, [searchParams, sessionId, sessionPatient, startSession, status]);
+  }, [searchParams, sessionId, sessionPatient, startSession]);
 
   const initials = patientName
     .split(/\s+/)
@@ -192,7 +188,8 @@ function GCCSessionPageContent() {
           <GCCSessionHero
             timer={formatElapsedTime(elapsedMs)}
             status={status}
-            onStartRecording={() => void startSession({ sessionId: sessionId ?? undefined, source: "manual", preserveTranscript: true, patient: sessionPatient })}
+            isManualDemo
+            onStartRecording={() => void startSession({ sessionId: sessionId ?? undefined, source: "manual", inputMode: "manual-demo", preserveTranscript: true, patient: sessionPatient })}
             onPauseRecording={pauseSession}
             onResumeRecording={resumeSession}
             onStopRecording={stopSession}
@@ -220,16 +217,10 @@ function GCCSessionPageContent() {
           )}
 
           <div className="mt-4 flex min-w-0 flex-col gap-7 sm:mt-5 sm:gap-8">
-            <GCCTranscript
-              segments={transcriptSegments}
-              interimTranscript={interimTranscript}
+            <GCCLiveTranscriptPanel
               status={status}
+              segments={transcriptSegments}
               formatTimestamp={formatElapsedTime}
-              highlights={transcriptHighlights}
-            />
-            <GCCDemoTranscriptPanel
-              status={status}
-              segments={transcriptSegments}
               onAppendLine={appendManualDemoTranscriptLine}
             />
             <GCCInsightsSheet />
