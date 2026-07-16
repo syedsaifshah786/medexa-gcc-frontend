@@ -22,15 +22,21 @@ export const GCC_DEMO_REVIEW_BUNDLE = {
     sessionItemsTitle: "Session items",
     codes: [
       {
-        code: "M54.13",
-        system: "ICD-10 AM",
-        description: "Radiculopathy, lumbar region",
+        code: "50115-00-00",
+        system: "CCHI-BS",
+        description: "",
         status: "Justified",
       },
       {
-        code: "9.3.42",
+        code: "96120-00-00",
         system: "CCHI-BS",
-        description: "Radiculopathy, lumbar region",
+        description: "",
+        status: "Matched",
+      },
+      {
+        code: "22065-00-00",
+        system: "CCHI-BS",
+        description: "",
         status: "Matched",
       },
     ],
