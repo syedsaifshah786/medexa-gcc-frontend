@@ -23,19 +23,19 @@ export const GCC_DEMO_REVIEW_BUNDLE = {
     codes: [
       {
         code: "50115-00-00",
-        system: "CCHI-BS",
+        system: "SBS V3",
         description: "",
         status: "Justified",
       },
       {
         code: "96120-00-00",
-        system: "CCHI-BS",
+        system: "SBS V3",
         description: "",
         status: "Matched",
       },
       {
         code: "22065-00-00",
-        system: "CCHI-BS",
+        system: "SBS V3",
         description: "",
         status: "Matched",
       },
