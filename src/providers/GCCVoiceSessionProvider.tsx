@@ -636,6 +636,10 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   }, [persistSession, setSafeStatus, startRecognition, startTimerInterval]);
 
   const clearSession = useCallback(() => {
+    safeStopRecognition("abort");
+    stopTimerInterval();
+    modeRef.current = "off";
+    shouldRecognitionRunRef.current = false;
     sessionIdRef.current = null;
     sessionPatientRef.current = null;
     sessionInputModeRef.current = "web-speech";
@@ -665,7 +669,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       window.sessionStorage.removeItem(storageKey);
     }
-  }, [setSafeStatus]);
+  }, [safeStopRecognition, setSafeStatus, stopTimerInterval]);
 
   const startSession = useCallback(async (options?: StartSessionOptions) => {
     const inputMode: SessionInputMode = "web-speech";

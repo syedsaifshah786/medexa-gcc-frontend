@@ -8,7 +8,12 @@ import GCCDeleteSessionDialog from "@/components/gcc/GCCDeleteSessionDialog";
 import { useSelectedDoctor } from "@/components/DoctorContext";
 import { useGCCLocale } from "@/hooks/useGCCLocale";
 import { useGCCVoiceSession } from "@/hooks/useGCCVoiceSession";
-import { loadUpcomingSessions, saveUpcomingSessions } from "@/lib/gcc/upcoming-session-storage";
+import {
+  getSelectedUpcomingSessionId,
+  loadUpcomingSessions,
+  saveSelectedUpcomingSession,
+  saveUpcomingSessions,
+} from "@/lib/gcc/upcoming-session-storage";
 import type { GCCUpcomingSession } from "@/types/gcc-patient";
 
 /* eslint-disable @next/next/no-img-element -- Prototype dashboard uses static mocked patient avatars. */
@@ -177,7 +182,7 @@ export default function GCCAmbientDashboard() {
     errorMessage: voiceError,
     enableVoiceControl,
     startAmbientCommandListening,
-    startSession,
+    clearSession,
   } = useGCCVoiceSession();
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [editingSession, setEditingSession] = useState<GCCUpcomingSession | null>(null);
@@ -315,11 +320,22 @@ export default function GCCAmbientDashboard() {
     setToast({ messageKey: "ambient.toast.deleted", tone: "success" });
   }, [isDeleting, sessionToDelete, upcomingSessions]);
 
-  const startNewSession = async () => {
-    const id = await startSession({ source: "manual" });
-    if (!id) return;
-    router.push(`/session?sessionId=${encodeURIComponent(id)}&autoStart=1&source=manual`);
-  };
+  const handleStartSession = useCallback((session: GCCUpcomingSession) => {
+    const previouslySelectedId = getSelectedUpcomingSessionId();
+    if (!saveSelectedUpcomingSession(session)) {
+      setToast({ messageKey: "ambient.toast.saveError", tone: "error" });
+      return;
+    }
+    if (previouslySelectedId !== session.id) {
+      clearSession();
+    }
+    router.push(`/session?patientId=${encodeURIComponent(session.id)}&autoStart=1`);
+  }, [clearSession, router]);
+
+  const startNewSession = useCallback(() => {
+    clearSession();
+    router.push("/session?autoStart=1&source=manual");
+  }, [clearSession, router]);
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[#f7f8fc] text-slate-900">
@@ -356,7 +372,7 @@ export default function GCCAmbientDashboard() {
 
           <div className="w-full min-w-0">
             <DashboardActionButtons onAddPatient={openAddPatient} onStartSession={startNewSession} className="mb-6 hidden lg:flex lg:justify-end" />
-            <UpcomingSessions sessions={upcomingSessions} onEdit={openEditSession} onDelete={requestDeleteSession} />
+            <UpcomingSessions sessions={upcomingSessions} onStart={handleStartSession} onEdit={openEditSession} onDelete={requestDeleteSession} />
           </div>
         </div>
 
@@ -589,10 +605,12 @@ function ActionItem({
 
 function UpcomingSessions({
   sessions,
+  onStart,
   onEdit,
   onDelete,
 }: {
   sessions: GCCUpcomingSession[];
+  onStart: (session: GCCUpcomingSession) => void;
   onEdit: (session: GCCUpcomingSession) => void;
   onDelete: (session: GCCUpcomingSession) => void;
 }) {
@@ -622,6 +640,7 @@ function UpcomingSessions({
           <SessionCard
             key={session.id}
             session={session}
+            onStart={onStart}
             isMenuOpen={openMenuId === session.id}
             onToggleMenu={() => setOpenMenuId((currentId) => (currentId === session.id ? null : session.id))}
             onCloseMenu={closeMenu}
@@ -636,6 +655,7 @@ function UpcomingSessions({
 
 function SessionCard({
   session,
+  onStart,
   isMenuOpen,
   onToggleMenu,
   onCloseMenu,
@@ -643,6 +663,7 @@ function SessionCard({
   onDelete,
 }: {
   session: GCCUpcomingSession;
+  onStart: (session: GCCUpcomingSession) => void;
   isMenuOpen: boolean;
   onToggleMenu: () => void;
   onCloseMenu: () => void;
@@ -757,41 +778,46 @@ function SessionCard({
   };
 
   return (
-    <article className="relative flex min-h-[106px] items-center gap-3 rounded-[12px] border border-[#e5e7eb] bg-white px-[15px] py-[13px] shadow-[0_5px_15px_rgba(15,23,42,0.035)]">
-      {session.avatarUrl ? (
-        <img src={session.avatarUrl} alt="" className="size-10 shrink-0 rounded-full object-cover ring-2 ring-white" />
-      ) : (
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700 ring-2 ring-white">{session.initials}</span>
-      )}
-      <div className="min-w-0 flex-1 pe-7">
-        <div>
-          <h3 className="truncate text-[16px] font-semibold leading-5 text-slate-950" dir="auto">{session.patientName}</h3>
-          <p className="mt-1 flex min-w-0 items-center gap-x-1.5 overflow-hidden text-[12px] font-medium leading-4 text-slate-500">
-            <span className={cx("size-1.5 shrink-0 rounded-full", statusTone.dot)} />
-            <span className="shrink-0">{t(statusTranslationKeys[session.status])}</span>
-            {sessionDateTime && (
-              <>
-                <span className="shrink-0 text-slate-300" aria-hidden="true">
-                  &bull;
-                </span>
-                <span className="truncate whitespace-nowrap text-[11px] text-slate-400">{sessionDateTime}</span>
-              </>
+    <article className="relative">
+      <button
+        type="button"
+        onClick={() => onStart(session)}
+        aria-label={`Start session for ${session.patientName}`}
+        className="flex min-h-[106px] w-full cursor-pointer items-center gap-3 rounded-[12px] border border-[#e5e7eb] bg-white px-[15px] py-[13px] text-start shadow-[0_5px_15px_rgba(15,23,42,0.035)] transition duration-200 hover:-translate-y-px hover:border-indigo-200 hover:shadow-[0_8px_20px_rgba(48,61,115,0.09)] active:translate-y-0 active:scale-[0.995] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+      >
+        {session.avatarUrl ? (
+          <img src={session.avatarUrl} alt="" className="size-10 shrink-0 rounded-full object-cover ring-2 ring-white" />
+        ) : (
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700 ring-2 ring-white">{session.initials}</span>
+        )}
+        <span className="min-w-0 flex-1 pe-7">
+          <span className="block">
+            <span className="block truncate text-[16px] font-semibold leading-5 text-slate-950" dir="auto">{session.patientName}</span>
+            <span className="mt-1 flex min-w-0 items-center gap-x-1.5 overflow-hidden text-[12px] font-medium leading-4 text-slate-500">
+              <span className={cx("size-1.5 shrink-0 rounded-full", statusTone.dot)} />
+              <span className="shrink-0">{t(statusTranslationKeys[session.status])}</span>
+              {sessionDateTime && (
+                <>
+                  <span className="shrink-0 text-slate-300" aria-hidden="true">&bull;</span>
+                  <span className="truncate whitespace-nowrap text-[11px] text-slate-400">{sessionDateTime}</span>
+                </>
+              )}
+            </span>
+          </span>
+          <span className="mt-2.5 block space-y-[5px]">
+            <span className="flex items-center gap-1.5 text-[12px] font-medium leading-4 text-slate-500">
+              <span className={cx("size-[7px] rounded-full", getNphiesDotTone(session.nphiesStatus))} />
+              {t("ambient.upcoming.nphies")}: <span className={getNphiesTone(session.nphiesStatus)}>{t(nphiesTranslationKeys[session.nphiesStatus])}</span>
+            </span>
+            {session.referenceId && (
+              <span className="block text-[11px] font-medium leading-[15px] text-slate-500">
+                {t("ambient.upcoming.referenceId")}: <bdi dir="ltr">{session.referenceId}</bdi>
+              </span>
             )}
-          </p>
-        </div>
-        <div className="mt-2.5 space-y-[5px]">
-          <p className="flex items-center gap-1.5 text-[12px] font-medium leading-4 text-slate-500">
-            <span className={cx("size-[7px] rounded-full", getNphiesDotTone(session.nphiesStatus))} />
-            {t("ambient.upcoming.nphies")}: <span className={getNphiesTone(session.nphiesStatus)}>{t(nphiesTranslationKeys[session.nphiesStatus])}</span>
-          </p>
-          {session.referenceId && (
-            <p className="text-[11px] font-medium leading-[15px] text-slate-500">
-              {t("ambient.upcoming.referenceId")}: <bdi dir="ltr">{session.referenceId}</bdi>
-            </p>
-          )}
-        </div>
-      </div>
-      <ChevronRightIcon className={cx("size-4 shrink-0 text-slate-300", direction === "rtl" && "rotate-180")} />
+          </span>
+        </span>
+        <ChevronRightIcon className={cx("size-4 shrink-0 text-slate-300", direction === "rtl" && "rotate-180")} />
+      </button>
 
       <div
         ref={actionsRef}

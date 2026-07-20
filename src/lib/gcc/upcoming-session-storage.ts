@@ -1,6 +1,21 @@
 import type { GCCUpcomingSession } from "@/types/gcc-patient";
 
 export const UPCOMING_SESSIONS_STORAGE_KEY = "medexa_gcc_upcoming_sessions_v2";
+export const SELECTED_PATIENT_STORAGE_KEY = "medexa_gcc_selected_patient";
+export const SELECTED_SESSION_ID_STORAGE_KEY = "medexa_gcc_selected_session_id";
+
+export type GCCSelectedPatientSession = Pick<
+  GCCUpcomingSession,
+  | "id"
+  | "patientName"
+  | "initials"
+  | "sessionType"
+  | "sessionDate"
+  | "sessionTime"
+  | "status"
+  | "nphiesStatus"
+  | "referenceId"
+> & { avatarUrl: string | null };
 
 const LEGACY_CUSTOM_SESSIONS_STORAGE_KEY = "medexa_gcc_custom_upcoming_sessions";
 const sessionStatuses: readonly GCCUpcomingSession["status"][] = [
@@ -117,6 +132,93 @@ export function saveUpcomingSessions(sessions: readonly GCCUpcomingSession[]): b
   }
 
   return writeStoredSessions(storage, deduplicateSessions(sessions));
+}
+
+export function getSelectedUpcomingSessionId(): string | null {
+  const storage = getBrowserStorage();
+  if (!storage) return null;
+  try {
+    return storage.getItem(SELECTED_SESSION_ID_STORAGE_KEY)?.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSelectedUpcomingSession(session: GCCUpcomingSession): boolean {
+  const storage = getBrowserStorage();
+  if (!storage) return false;
+  const selected: GCCSelectedPatientSession = {
+    id: session.id,
+    patientName: session.patientName,
+    initials: session.initials,
+    avatarUrl: session.avatarUrl ?? null,
+    sessionType: session.sessionType,
+    sessionDate: session.sessionDate,
+    sessionTime: session.sessionTime,
+    status: session.status,
+    nphiesStatus: session.nphiesStatus,
+    referenceId: session.referenceId,
+  };
+
+  try {
+    storage.setItem(SELECTED_PATIENT_STORAGE_KEY, JSON.stringify(selected));
+    storage.setItem(SELECTED_SESSION_ID_STORAGE_KEY, session.id);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function loadSelectedUpcomingSession(patientId: string): GCCSelectedPatientSession | null {
+  const storage = getBrowserStorage();
+  if (!storage || !patientId) return null;
+
+  try {
+    const selectedValue = storage.getItem(SELECTED_PATIENT_STORAGE_KEY);
+    if (selectedValue) {
+      const selected: unknown = JSON.parse(selectedValue);
+      if (validateSelectedSession(selected) && selected.id === patientId) {
+        return { ...selected };
+      }
+    }
+
+    const storedSessions = readStoredSessions(storage, UPCOMING_SESSIONS_STORAGE_KEY);
+    if (storedSessions.status !== "valid") return null;
+    const session = storedSessions.sessions.find((candidate) => candidate.id === patientId);
+    return session
+      ? {
+          id: session.id,
+          patientName: session.patientName,
+          initials: session.initials,
+          avatarUrl: session.avatarUrl ?? null,
+          sessionType: session.sessionType,
+          sessionDate: session.sessionDate,
+          sessionTime: session.sessionTime,
+          status: session.status,
+          nphiesStatus: session.nphiesStatus,
+          referenceId: session.referenceId,
+        }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function validateSelectedSession(value: unknown): value is GCCSelectedPatientSession {
+  if (!value || typeof value !== "object") return false;
+  const session = value as Record<string, unknown>;
+  return (
+    typeof session.id === "string" && session.id.length > 0 &&
+    typeof session.patientName === "string" &&
+    typeof session.initials === "string" &&
+    (session.avatarUrl === null || typeof session.avatarUrl === "string") &&
+    typeof session.sessionType === "string" &&
+    typeof session.sessionDate === "string" &&
+    typeof session.sessionTime === "string" &&
+    sessionStatuses.includes(session.status as GCCUpcomingSession["status"]) &&
+    nphiesStatuses.includes(session.nphiesStatus as GCCUpcomingSession["nphiesStatus"]) &&
+    typeof session.referenceId === "string"
+  );
 }
 
 function getBrowserStorage(): Storage | null {

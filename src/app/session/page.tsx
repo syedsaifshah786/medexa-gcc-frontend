@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft, BadgeCheck, CheckCircle2, RotateCcw, UserRound } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import GCCClaimQualityDropdown from "@/components/gcc/GCCClaimQualityDropdown";
@@ -12,6 +12,15 @@ import { useGCCLocale } from "@/hooks/useGCCLocale";
 import { useGCCLiveInsights } from "@/hooks/useGCCLiveInsights";
 import { useGCCVoiceSession } from "@/hooks/useGCCVoiceSession";
 import { useSBSKeywordDetection } from "@/hooks/useSBSKeywordDetection";
+import {
+  loadSelectedUpcomingSession,
+  type GCCSelectedPatientSession,
+} from "@/lib/gcc/upcoming-session-storage";
+
+type ResolvedPatientSession = {
+  patientId: string | null;
+  session: GCCSelectedPatientSession | null;
+};
 
 export default function GCCSessionPage() {
   return (
@@ -23,7 +32,7 @@ export default function GCCSessionPage() {
 
 function GCCSessionPageContent() {
   const searchParams = useSearchParams();
-  const hasStartedLiveSessionRef = useRef(false);
+  const hasAutoStartedRef = useRef(false);
   const { locale, t, formatNumber, formatSessionProgress } = useGCCLocale();
   const {
     sessionId,
@@ -47,16 +56,28 @@ function GCCSessionPageContent() {
   } = useGCCVoiceSession();
 
   const patientId = searchParams.get("patientId")?.trim() || null;
-  const patientName = searchParams.get("patientName")?.trim() || "Patient";
-  const patientSessionType = searchParams.get("sessionType")?.trim() || null;
-  const patientAvatar =
-    searchParams.get("avatarUrl")?.trim() ||
-    null;
+  const [resolvedPatientSession, setResolvedPatientSession] = useState<ResolvedPatientSession>({
+    patientId: null,
+    session: null,
+  });
+  useEffect(() => {
+    const session = patientId ? loadSelectedUpcomingSession(patientId) : null;
+    // The selection is browser-only data and must be resolved after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setResolvedPatientSession({ patientId, session });
+  }, [patientId]);
+  const selectionResolved = resolvedPatientSession.patientId === patientId;
+  const selectedSession = selectionResolved ? resolvedPatientSession.session : null;
+  const patientName = selectedSession?.patientName || searchParams.get("patientName")?.trim() || "Patient";
+  const patientSessionType = selectedSession?.sessionType || searchParams.get("sessionType")?.trim() || null;
+  const patientAvatar = selectedSession?.avatarUrl || searchParams.get("avatarUrl")?.trim() || null;
   const patientAge = searchParams.get("patientAge")?.trim() || "";
   const patientGender = searchParams.get("patientGender")?.trim() || "";
   const completedSessions = searchParams.get("completedSessions")?.trim() || "";
   const totalSessions = searchParams.get("totalSessions")?.trim() || "";
-  const isPatientVerified = searchParams.get("verified") === "1";
+  const isPatientVerified = selectedSession
+    ? selectedSession.nphiesStatus === "Cleared" || selectedSession.nphiesStatus === "Verified"
+    : searchParams.get("verified") === "1";
   const patient = useMemo(
     () => ({ id: patientId, name: patientName, sessionType: patientSessionType }),
     [patientId, patientName, patientSessionType],
@@ -71,7 +92,7 @@ function GCCSessionPageContent() {
         : patientGender;
     return {
       name: patientName,
-      age: Number.isFinite(numericAge) ? numericAge : null,
+      age: patientAge && Number.isFinite(numericAge) ? numericAge : null,
       gender,
     };
   }, [patientAge, patientGender, patientName]);
@@ -96,22 +117,26 @@ function GCCSessionPageContent() {
     setSBSMatches(sbsDetection.finalizedMatches);
   }, [sbsDetection.finalizedMatches, setSBSMatches]);
   useEffect(() => {
+    if (!selectionResolved) return;
     setSessionPatient(sessionPatient);
-  }, [sessionPatient, setSessionPatient]);
+  }, [selectionResolved, sessionPatient, setSessionPatient]);
 
   useEffect(() => {
-    if (hasStartedLiveSessionRef.current) return;
-    hasStartedLiveSessionRef.current = true;
+    if (searchParams.get("autoStart") !== "1" || !selectionResolved || hasAutoStartedRef.current) return;
+    hasAutoStartedRef.current = true;
     const requestedSessionId = searchParams.get("sessionId") ?? undefined;
+    if (status === "recording" && sessionId && (!requestedSessionId || requestedSessionId === sessionId)) {
+      return;
+    }
     void startSession({
       sessionId: requestedSessionId,
       source: "manual",
       preserveTranscript: Boolean(requestedSessionId && requestedSessionId === sessionId),
       patient: sessionPatient,
     });
-  }, [searchParams, sessionId, sessionPatient, startSession]);
+  }, [searchParams, selectionResolved, sessionId, sessionPatient, startSession, status]);
 
-  const initials = patientName
+  const initials = selectedSession?.initials || patientName
     .split(/\s+/)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
@@ -133,6 +158,11 @@ function GCCSessionPageContent() {
     completedSessions && totalSessions && Number.isFinite(numericCompletedSessions) && Number.isFinite(numericTotalSessions) && numericTotalSessions > 0
       ? formatSessionProgress(numericCompletedSessions, numericTotalSessions)
       : "—";
+  const selectedSessionDetails = selectedSession
+    ? [selectedSession.sessionType, selectedSession.status, selectedSession.referenceId]
+        .filter(Boolean)
+        .join(" | ")
+    : null;
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_50%_12%,rgba(238,242,255,0.7),transparent_34%),linear-gradient(180deg,#ffffff_0%,#fdfdff_100%)] text-slate-900">
@@ -183,7 +213,7 @@ function GCCSessionPageContent() {
                 )}
               </div>
               <p className="mt-0.5 truncate text-[14px] font-normal text-[#31313a] sm:text-[16px]">
-                {t("session.page.progress", { progress: sessionProgress })}
+                {selectedSessionDetails || t("session.page.progress", { progress: sessionProgress })}
               </p>
             </div>
           </div>
