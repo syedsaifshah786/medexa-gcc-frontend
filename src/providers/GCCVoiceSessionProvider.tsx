@@ -7,6 +7,7 @@ import {
   buildFinalTranscript,
   detectAmbientVoiceCommand,
   detectSessionVoiceCommand,
+  normalizeTranscript,
   normalizeVoiceCommandText,
   removeVoiceCommands,
 } from "@/lib/gcc/transcript-utils";
@@ -25,7 +26,7 @@ export type TranscriptSegment = {
   timestampMs: number;
   isFinal: boolean;
   confidence?: number;
-  speaker?: "clinician" | "patient";
+  speaker?: "clinician" | "patient" | "unknown";
   speakerLabel?: string;
   source?: "web-speech";
 };
@@ -41,6 +42,7 @@ type PersistedVoiceSession = {
   status: SessionStatus;
   finalTranscript: string;
   transcriptSegments: TranscriptSegment[];
+  transcriptRevision?: number;
   elapsedMs: number;
   source?: SessionSource;
   inputMode?: SessionInputMode;
@@ -65,6 +67,7 @@ type GCCVoiceSessionContextValue = {
   finalTranscript: string;
   interimTranscript: string;
   transcriptSegments: TranscriptSegment[];
+  transcriptRevision: number;
   latestHeardText: string;
   elapsedMs: number;
   startedAt: number | null;
@@ -156,6 +159,9 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   const lastFinalTextRef = useRef("");
   const latestHeardTextRef = useRef("");
   const transcriptSegmentsRef = useRef<TranscriptSegment[]>([]);
+  const transcriptRevisionRef = useRef(0);
+  const processedSegmentIdsRef = useRef(new Set<string>());
+  const recognitionCycleRef = useRef(0);
   const sbsMatchesRef = useRef<SBSMatch[]>([]);
   const recognitionEndWaitersRef = useRef<Array<() => void>>([]);
   const processRecognitionResultRef = useRef<(event: SpeechRecognitionEvent) => void>(() => undefined);
@@ -168,6 +174,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   const [finalTranscript, setFinalTranscript] = useState("");
   const [interimTranscript, setInterimTranscript] = useState("");
   const [transcriptSegments, setTranscriptSegments] = useState<TranscriptSegment[]>([]);
+  const [transcriptRevision, setTranscriptRevision] = useState(0);
   const [latestHeardText, setLatestHeardText] = useState("");
   const [elapsedMs, setElapsedMs] = useState(0);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -191,6 +198,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       status: statusRef.current,
       finalTranscript: finalTranscriptRef.current,
       transcriptSegments: transcriptSegmentsRef.current,
+      transcriptRevision: transcriptRevisionRef.current,
       elapsedMs: accumulatedMsRef.current + (sessionStartedAtRef.current ? performance.now() - sessionStartedAtRef.current : 0),
       startedAt: sessionStartedAtRef.current,
       patient: sessionPatientRef.current ?? undefined,
@@ -345,6 +353,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
 
     try {
       recognitionStartingRef.current = true;
+      recognitionCycleRef.current += 1;
       recognitionRef.current.start();
       return true;
     } catch (error) {
@@ -451,10 +460,16 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     void waitForRecognitionEnd().then(applyLanguageAndRestart);
   }, [clearRestartTimeout, speechLanguage, startRecognition, waitForRecognitionEnd]);
 
-  const appendFinalTranscript = useCallback((text: string, confidence?: number) => {
-    const cleanText = text.trim();
-    if (!cleanText || cleanText === lastFinalTextRef.current) return;
+  const appendFinalTranscript = useCallback((text: string, confidence?: number, resultId?: string) => {
+    const cleanText = normalizeTranscript(text);
+    const stableResultId = resultId?.trim();
+    if (
+      !cleanText ||
+      (stableResultId && processedSegmentIdsRef.current.has(stableResultId)) ||
+      cleanText === lastFinalTextRef.current
+    ) return;
 
+    if (stableResultId) processedSegmentIdsRef.current.add(stableResultId);
     lastFinalTextRef.current = cleanText;
     const segment: TranscriptSegment = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -468,7 +483,9 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     transcriptSegmentsRef.current = nextSegments;
     setTranscriptSegments(nextSegments);
     finalTranscriptRef.current = [finalTranscriptRef.current, cleanText].filter(Boolean).join(" ");
+    transcriptRevisionRef.current += 1;
     setFinalTranscript(finalTranscriptRef.current);
+    setTranscriptRevision(transcriptRevisionRef.current);
     interimTranscriptRef.current = "";
     setInterimTranscript("");
     persistSession({ transcriptSegments: nextSegments, finalTranscript: finalTranscriptRef.current });
@@ -554,7 +571,9 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       }
 
       const reviewBundle = buildReviewBundleFromFinalizeResponse(response, locale);
-      saveReviewBundleLocally(reviewBundle, locale);
+      if (!saveReviewBundleLocally(reviewBundle, locale)) {
+        throw new Error("FINALIZE_CACHE_FAILED");
+      }
       saveSoapLocally({
         sessionId: id,
         soapNote: reviewBundle.soapNote,
@@ -567,7 +586,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       setSafeStatus("stopped");
       persistSession({ status: "stopped", elapsedMs: frozenElapsed });
       setFinalizationMessage(null);
-      router.push(`/soap-notes?sessionId=${encodeURIComponent(id)}`);
+      router.replace(`/soap-notes?sessionId=${encodeURIComponent(id)}`);
     } catch (error) {
       const messageKey =
         error instanceof Error && error.message === "NO_TRANSCRIPT"
@@ -647,6 +666,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     finalTranscriptRef.current = "";
     interimTranscriptRef.current = "";
     transcriptSegmentsRef.current = [];
+    transcriptRevisionRef.current = 0;
+    processedSegmentIdsRef.current.clear();
     sbsMatchesRef.current = [];
     lastFinalTextRef.current = "";
     accumulatedMsRef.current = 0;
@@ -660,6 +681,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     setFinalTranscript("");
     setInterimTranscript("");
     setTranscriptSegments([]);
+    setTranscriptRevision(0);
     setLatestHeardText("");
     setElapsedMs(0);
     setStartedAt(null);
@@ -690,11 +712,14 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       finalTranscriptRef.current = "";
       interimTranscriptRef.current = "";
       transcriptSegmentsRef.current = [];
+      transcriptRevisionRef.current = 0;
+      processedSegmentIdsRef.current.clear();
       sbsMatchesRef.current = [];
       lastFinalTextRef.current = "";
       setFinalTranscript("");
       setInterimTranscript("");
       setTranscriptSegments([]);
+      setTranscriptRevision(0);
       accumulatedMsRef.current = 0;
       setElapsedMs(0);
     }
@@ -801,7 +826,11 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       }
 
       if (result.isFinal) {
-        appendFinalTranscript(text, alternative.confidence);
+        appendFinalTranscript(
+          text,
+          alternative.confidence,
+          `${recognitionCycleRef.current}:${index}`,
+        );
       } else {
         interimTranscriptRef.current = text;
         setInterimTranscript(text);
@@ -854,10 +883,14 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
           sessionInputModeRef.current = parsed.inputMode ?? "web-speech";
           finalTranscriptRef.current = parsed.finalTranscript ?? "";
           transcriptSegmentsRef.current = parsed.transcriptSegments ?? [];
+          lastFinalTextRef.current = transcriptSegmentsRef.current.at(-1)?.text ?? "";
+          transcriptRevisionRef.current =
+            parsed.transcriptRevision ?? transcriptSegmentsRef.current.filter((segment) => segment.isFinal).length;
           accumulatedMsRef.current = parsed.elapsedMs ?? 0;
           setSessionId(parsed.sessionId);
           setFinalTranscript(parsed.finalTranscript ?? "");
           setTranscriptSegments(parsed.transcriptSegments ?? []);
+          setTranscriptRevision(transcriptRevisionRef.current);
           setElapsedMs(parsed.elapsedMs ?? 0);
           setSafeStatus(parsed.status === "recording" ? "idle" : parsed.status);
         } catch {
@@ -983,6 +1016,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       finalTranscript,
       interimTranscript,
       transcriptSegments,
+      transcriptRevision,
       latestHeardText,
       elapsedMs,
       startedAt,
@@ -1036,6 +1070,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       status,
       stopSession,
       transcriptSegments,
+      transcriptRevision,
     ],
   );
 

@@ -93,6 +93,7 @@ export type GCCReviewBundle = {
   sessionId: string;
   locale: GCCLocale;
   status: "completed";
+  source?: "live";
   transcript: string;
   elapsedMs: number;
   soapNote: GCCSoapNote;
@@ -194,7 +195,7 @@ const emptyPatientSummary: GCCPatientSummary = {
 };
 
 export function getApiBaseUrl() {
-  return (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
+  return (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 }
 
 export function getReviewBundleStorageKey(sessionId: string, locale: GCCLocale) {
@@ -307,6 +308,7 @@ function normalizeResponseBundle(
     sessionId: response.session_id,
     locale,
     status: "completed",
+    source: "live",
     transcript: response.transcript ?? "",
     elapsedMs: response.elapsed_ms ?? 0,
     soapNote: response.review_bundle.soap_note,
@@ -381,7 +383,7 @@ export function saveReviewBundleLocally(bundle: GCCReviewBundle, locale = bundle
   try {
     localStorage.setItem(
       getReviewBundleStorageKey(bundle.sessionId, locale),
-      JSON.stringify({ ...bundle, locale }),
+      JSON.stringify({ ...bundle, locale, source: "live" }),
     );
     return true;
   } catch {
@@ -439,10 +441,6 @@ export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCF
     throw new Error("No clinical transcript was captured. Continue the session or enter a note before generating review.");
   }
 
-  if (!apiBaseUrl) {
-    throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
-  }
-
   const controller = new AbortController();
   const timeoutId = window.setTimeout(() => controller.abort(), 55000);
 
@@ -457,10 +455,28 @@ export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCF
         language: locale,
         locale: locale === "ar" ? "ar-SA" : "en-US",
         transcript,
-        transcript_segments: payload.transcriptSegments,
-        elapsed_ms: payload.elapsedMs,
+        transcript_segments: payload.transcriptSegments.map((segment) => ({
+          id: segment.id,
+          speaker: segment.speaker ?? "unknown",
+          text: segment.text,
+          timestamp_ms: Math.max(0, Math.round(segment.timestampMs)),
+          is_final: segment.isFinal,
+          confidence: segment.confidence,
+        })),
+        elapsed_ms: Math.max(0, Math.round(payload.elapsedMs)),
         patient: payload.patient ?? { name: "", age: null, gender: "" },
-        sbs_matches: payload.sbsMatches,
+        sbs_matches: payload.sbsMatches.map((match) => ({
+          id: match.id,
+          segment_id: match.segmentId,
+          code: match.code,
+          official_title: match.officialTitle,
+          matched_text: match.matchedText,
+          normalized_match: match.normalizedMatch,
+          start: match.start,
+          end: match.end,
+          confidence: match.confidence,
+          detected_at: match.detectedAt,
+        })),
         generate_review_bundle: true,
       }),
     });
@@ -470,6 +486,9 @@ export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCF
     }
 
     const validated = validateFinalizeResponse(await response.json(), locale);
+    if (validated.session_id !== payload.sessionId || !normalizeTranscript(validated.transcript)) {
+      throw new Error("Finalize session returned a mismatched or empty transcript.");
+    }
     if (!validated.review_bundle.billing_intelligence || !validated.review_bundle.patient_summary) {
       throw new Error("Finalize session did not return a complete review bundle.");
     }
@@ -502,9 +521,10 @@ function normalizeStoredBundle(
   if (parsed.sessionId !== sessionId || parsed.status !== "completed" || !parsed.soapNote || !parsed.billingIntelligence || !parsed.patientSummary) {
     return null;
   }
+  if ("source" in parsed && parsed.source !== "live") return null;
   if (parsed.locale !== undefined && parsed.locale !== locale) return null;
   if (locale === "ar" && parsed.locale !== "ar") return null;
-  return { ...parsed, locale } as GCCReviewBundle;
+  return { ...parsed, locale, source: "live" } as GCCReviewBundle;
 }
 
 export function readReviewBundleFromCache(sessionId: string, locale: GCCLocale = "en") {
@@ -555,6 +575,7 @@ export async function fetchGCCReviewBundle(
         sessionId,
         locale,
         status: "completed",
+        source: "live",
         transcript,
         elapsedMs,
         soapNote,
@@ -579,6 +600,7 @@ export async function fetchGCCReviewBundle(
     sessionId,
     locale,
     status: "completed",
+    source: "live",
     transcript: "",
     elapsedMs: 0,
     soapNote,

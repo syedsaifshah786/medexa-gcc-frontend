@@ -55,6 +55,8 @@ export type GCCLiveInsightsPatient = {
 };
 
 export type GCCLiveTranscriptSegment = {
+  id: string;
+  speaker?: "clinician" | "patient" | "unknown";
   text: string;
   timestampMs: number;
   isFinal: boolean;
@@ -66,6 +68,7 @@ export type UseGCCLiveInsightsOptions = {
   isRecording: boolean;
   isPaused: boolean;
   isFinalizing: boolean;
+  transcriptRevision: number;
   finalizedTranscript: string;
   interimTranscript: string;
   transcriptSegments: readonly GCCLiveTranscriptSegment[];

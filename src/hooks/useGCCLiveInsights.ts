@@ -112,6 +112,8 @@ function latestFinalSegments(segments: readonly GCCLiveTranscriptSegment[]) {
     .slice(-recentSegmentLimit)
     .map((segment) => ({
       text: normalizeTranscript(segment.text),
+      id: segment.id,
+      speaker: segment.speaker ?? "unknown",
       timestampMs: Number.isFinite(segment.timestampMs) ? Math.max(0, segment.timestampMs) : 0,
       isFinal: true,
     }));
@@ -252,6 +254,7 @@ export function useGCCLiveInsights({
   isRecording,
   isPaused,
   isFinalizing,
+  transcriptRevision,
   finalizedTranscript,
   interimTranscript,
   transcriptSegments,
@@ -292,8 +295,10 @@ export function useGCCLiveInsights({
   const forceTimerRef = useRef<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const requestSequenceRef = useRef(0);
-  const transcriptRevisionRef = useRef(0);
+  const analysisRevisionRef = useRef(0);
   const lastRequestedRevisionRef = useRef(0);
+  const lastCompletedSequenceRef = useRef(0);
+  const lastAcceptedRevisionRef = useRef(0);
   const lastObservedTranscriptRef = useRef("");
   const lastRequestedTranscriptRef = useRef("");
   const lastAcceptedTranscriptRef = useRef("");
@@ -402,7 +407,7 @@ export function useGCCLiveInsights({
       return;
     }
 
-    const requestRevision = transcriptRevisionRef.current;
+    const requestRevision = analysisRevisionRef.current;
     if (
       requestRevision <= lastRequestedRevisionRef.current ||
       countChangedCharacters(lastRequestedTranscriptRef.current, candidate.transcript) < minimumChangedCharacters
@@ -463,6 +468,7 @@ export function useGCCLiveInsights({
       });
 
       if (
+        requestSequence < lastCompletedSequenceRef.current ||
         requestSequence !== requestSequenceRef.current ||
         candidate.sessionId !== activeSessionIdRef.current ||
         candidate.locale !== activeLocaleRef.current ||
@@ -472,16 +478,9 @@ export function useGCCLiveInsights({
         return;
       }
 
-      if (response.transcriptRevision < transcriptRevisionRef.current) {
-        setState((current) =>
-          current.sessionId === candidate.sessionId &&
-          current.locale === candidate.locale &&
-          current.status === "analyzing"
-            ? { ...current, status: current.lastUpdatedAt ? "updated" : "idle" }
-            : current,
-        );
-        return;
-      }
+      if (response.transcriptRevision < lastAcceptedRevisionRef.current) return;
+      lastCompletedSequenceRef.current = requestSequence;
+      lastAcceptedRevisionRef.current = response.transcriptRevision;
 
       const currentApprovedIds = mergedApprovedIds();
       const currentIgnoredIds = mergedIgnoredIds();
@@ -552,8 +551,10 @@ export function useGCCLiveInsights({
       suggestionsRef.current = [];
       localApprovedIdsRef.current.clear();
       localIgnoredIdsRef.current.clear();
-      transcriptRevisionRef.current = 0;
+      analysisRevisionRef.current = 0;
       lastRequestedRevisionRef.current = 0;
+      lastCompletedSequenceRef.current = 0;
+      lastAcceptedRevisionRef.current = 0;
       lastObservedTranscriptRef.current = "";
       lastRequestedTranscriptRef.current = "";
       lastAcceptedTranscriptRef.current = "";
@@ -564,8 +565,10 @@ export function useGCCLiveInsights({
       requestSequenceRef.current += 1;
       activeLocaleRef.current = locale;
       suggestionsRef.current = [];
-      transcriptRevisionRef.current = 0;
+      analysisRevisionRef.current = 0;
       lastRequestedRevisionRef.current = 0;
+      lastCompletedSequenceRef.current = 0;
+      lastAcceptedRevisionRef.current = 0;
       lastObservedTranscriptRef.current = "";
       lastRequestedTranscriptRef.current = "";
       lastAcceptedTranscriptRef.current = "";
@@ -588,7 +591,10 @@ export function useGCCLiveInsights({
 
     if (requestTranscript === lastObservedTranscriptRef.current) return;
     lastObservedTranscriptRef.current = requestTranscript;
-    transcriptRevisionRef.current += 1;
+    analysisRevisionRef.current = Math.max(
+      analysisRevisionRef.current + 1,
+      transcriptRevision,
+    );
 
     const changedCharacters = countChangedCharacters(lastRequestedTranscriptRef.current, requestTranscript);
     if (changedCharacters < minimumChangedCharacters) {
@@ -626,6 +632,7 @@ export function useGCCLiveInsights({
     requestTranscript,
     runRequest,
     sessionId,
+    transcriptRevision,
   ]);
 
   useEffect(

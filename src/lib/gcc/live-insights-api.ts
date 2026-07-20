@@ -84,10 +84,10 @@ function normalizeFingerprintPart(value: string) {
 
 export function createGCCSuggestionFingerprint(
   category: GCCLiveSuggestionCategory,
-  _title: string,
+  title: string,
   evidence: string,
 ) {
-  return [category, normalizeFingerprintPart(evidence)].join("|");
+  return [category, normalizeFingerprintPart(title), normalizeFingerprintPart(evidence)].join("|");
 }
 
 function parseSuggestion(value: unknown, receivedAt: string): GCCLiveSuggestion {
@@ -236,9 +236,15 @@ export async function requestGCCLiveInsights({
   sbsMatches,
   signal,
 }: GCCLiveInsightsRequestInput) {
-  const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
-  if (!apiBaseUrl) {
-    throw new Error("Live insights are not configured.");
+  const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
+
+  if (process.env.NODE_ENV === "development") {
+    console.debug("[GCC live insights] request started", {
+      hasSessionId: Boolean(sessionId),
+      transcriptRevision,
+      segmentCount: recentSegments.length,
+      sbsMatchCount: sbsMatches.length,
+    });
   }
 
   const response = await fetch(`${apiBaseUrl}/sessions/${encodeURIComponent(sessionId)}/live-insights`, {
@@ -254,6 +260,8 @@ export async function requestGCCLiveInsights({
       elapsed_ms: Math.max(0, Math.round(elapsedMs)),
       recent_transcript: recentTranscript,
       recent_segments: recentSegments.map((segment) => ({
+        id: segment.id,
+        speaker: segment.speaker,
         text: segment.text,
         timestamp_ms: Math.max(0, Math.round(segment.timestampMs)),
         is_final: segment.isFinal,
@@ -282,7 +290,14 @@ export async function requestGCCLiveInsights({
   });
 
   if (!response.ok) {
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[GCC live insights] request failed", { status: response.status });
+    }
     throw new Error("Live insights request failed.");
+  }
+
+  if (process.env.NODE_ENV === "development") {
+    console.debug("[GCC live insights] response received", { status: response.status });
   }
 
   return parseGCCLiveInsightsResponse(await response.json(), locale);
