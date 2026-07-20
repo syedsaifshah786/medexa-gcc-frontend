@@ -1,112 +1,69 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import GCCSuggestionCard, {
-  type GCCDemoSuggestionExit,
-  type GCCDemoSuggestionKind,
-} from "@/components/gcc/GCCSuggestionCard";
+import { useEffect, useMemo, useRef, useState } from "react";
+import GCCSuggestionCard, { type GCCDemoSuggestionExit } from "@/components/gcc/GCCSuggestionCard";
+import { useGCCLocale } from "@/hooks/useGCCLocale";
+import type { GCCLiveInsightsStatus, GCCLiveSuggestion } from "@/types/gcc-live-insights";
 
-type LiveSuggestion = {
-  id: string;
-  kind: GCCDemoSuggestionKind;
-  title: "Billing" | "Protocol Ask" | "Detected";
-  message: string;
+type Props = {
+  suggestions: GCCLiveSuggestion[];
+  status: GCCLiveInsightsStatus;
+  lastUpdatedAt: number | null;
+  hasTranscript: boolean;
+  onApprove: (fingerprint: string) => void;
+  onIgnore: (fingerprint: string) => void;
 };
 
-const initialSuggestions: LiveSuggestion[] = [
-  {
-    id: "protocol-family-history",
-    kind: "protocol",
-    title: "Protocol Ask",
-    message: "Does anyone in your family have diabetes or vascular issues?",
-  },
-  {
-    id: "billing-50115-00-00",
-    kind: "billing",
-    title: "Billing",
-    message: "Code 50115-00-00 has been identified.",
-  },
-  {
-    id: "detected-fatigue-lower-back-pain",
-    kind: "detected",
-    title: "Detected",
-    message: "Patient reports persistent fatigue and lower back pain for 3 weeks.",
-  },
-  {
-    id: "protocol-physical-activity",
-    kind: "protocol",
-    title: "Protocol Ask",
-    message: "How often do you engage in physical activity each week?",
-  },
-  {
-    id: "billing-96120-00-00",
-    kind: "billing",
-    title: "Billing",
-    message: "Code 96120-00-00 has been identified.",
-  },
-  {
-    id: "billing-22065-00-00",
-    kind: "billing",
-    title: "Billing",
-    message: "Code 22065-00-00 has been identified.",
-  },
-];
-
-function normalizeFingerprintPart(value: string) {
-  return value.normalize("NFKC").toLocaleLowerCase("und").replace(/\s+/g, " ").trim();
-}
-
-function createSuggestionFingerprint(suggestion: LiveSuggestion) {
-  return [suggestion.kind, suggestion.title, suggestion.message]
-    .map(normalizeFingerprintPart)
-    .join("|");
-}
-
-function deduplicateSuggestions(suggestions: readonly LiveSuggestion[]) {
-  const seen = new Set<string>();
-  return suggestions.filter((suggestion) => {
-    const fingerprint = createSuggestionFingerprint(suggestion);
-    if (seen.has(fingerprint)) return false;
-    seen.add(fingerprint);
-    return true;
-  });
-}
-
-export default function GCCInsightsSheet() {
+export default function GCCInsightsSheet({ suggestions, status, lastUpdatedAt, hasTranscript, onApprove, onIgnore }: Props) {
+  const { t, formatNumber } = useGCCLocale();
   const timersRef = useRef<number[]>([]);
-  const [suggestions, setSuggestions] = useState<LiveSuggestion[]>(initialSuggestions);
   const [exitStates, setExitStates] = useState<Record<string, GCCDemoSuggestionExit>>({});
-  const uniqueSuggestions = useMemo(() => deduplicateSuggestions(suggestions), [suggestions]);
+  const activeSuggestions = useMemo(
+    () => suggestions.filter((suggestion) => suggestion.status === "active" || exitStates[suggestion.fingerprint] === "approved"),
+    [exitStates, suggestions],
+  );
 
-  useEffect(() => {
-    const timers = timersRef.current;
-    return () => {
-      timers.forEach((timer) => window.clearTimeout(timer));
-    };
-  }, []);
+  useEffect(() => () => timersRef.current.forEach((timer) => window.clearTimeout(timer)), []);
 
-  const dismissSuggestion = useCallback((id: string, state: Exclude<GCCDemoSuggestionExit, null>) => {
-    setExitStates((current) => ({ ...current, [id]: state }));
+  const dismissSuggestion = (fingerprint: string, nextState: Exclude<GCCDemoSuggestionExit, null>) => {
+    setExitStates((current) => ({ ...current, [fingerprint]: nextState }));
+    if (nextState === "approved") onApprove(fingerprint);
+    else onIgnore(fingerprint);
     const timer = window.setTimeout(() => {
-      setSuggestions((current) => current.filter((suggestion) => suggestion.id !== id));
       setExitStates((current) => {
         const next = { ...current };
-        delete next[id];
+        delete next[fingerprint];
         return next;
       });
-    }, state === "approved" ? 720 : 320);
+    }, nextState === "approved" ? 900 : 320);
     timersRef.current.push(timer);
-  }, []);
+  };
+
+  const headline = status === "paused"
+    ? t("session.insights.headline.paused")
+    : status === "unavailable"
+      ? t("session.insights.headline.unavailable")
+      : t("session.insights.headline.processing");
+  const statusText = status === "analyzing"
+    ? t("session.insights.status.analyzing")
+    : status === "paused"
+      ? t("session.insights.status.paused")
+      : status === "unavailable"
+        ? t("session.insights.status.unavailable")
+        : lastUpdatedAt
+          ? t("session.insights.status.updated")
+          : t("session.insights.status.listening");
 
   return (
     <section aria-labelledby="insights-title" className="mx-auto w-full max-w-[720px]">
-      <header className="mb-5 flex items-center justify-between gap-4 px-4 sm:px-16">
-        <h2 id="insights-title" className="truncate text-[16px] font-normal text-[#8b8b91] sm:text-[18px]">
-          Medexa is <span className="text-[#77777d]">Processing for Insights...</span>
-        </h2>
+      <header className="mb-5 flex items-start justify-between gap-4 px-4 sm:px-16">
+        <div className="min-w-0">
+          <h2 id="insights-title" className="truncate text-[16px] font-normal text-[#8b8b91] sm:text-[18px]">{headline}</h2>
+          <p role="status" className="mt-1 text-[11px] font-medium text-indigo-500">{statusText}</p>
+        </div>
         <p className="shrink-0 text-[16px] text-[#606067] sm:text-[18px]" aria-live="polite">
-          <strong className="me-2 font-semibold text-[#17171b]">{uniqueSuggestions.length}</strong>
-          Suggestions
+          <strong className="me-2 font-semibold text-[#17171b]">{formatNumber(activeSuggestions.length)}</strong>
+          {t("session.insights.suggestionCount.other", { count: "" }).trim()}
         </p>
       </header>
 
@@ -118,24 +75,25 @@ export default function GCCInsightsSheet() {
           <span className="absolute left-1/2 top-5 z-10 h-2 w-[72px] -translate-x-1/2 rounded-full bg-[#d6d6d9] shadow-inner" aria-hidden="true" />
 
           <div className="gcc-insights-scroll relative h-[clamp(470px,62vh,690px)] overflow-y-auto overscroll-contain px-4 pb-10 pt-16 sm:px-12 sm:pb-12 sm:pt-20" aria-live="polite">
-            <div className="mx-auto grid max-w-[570px] gap-7">
-              {uniqueSuggestions.map((suggestion) => {
-                const exitState = exitStates[suggestion.id] ?? null;
-                return (
-                  <div key={suggestion.id} className="relative ps-7 sm:ps-14">
+            {activeSuggestions.length > 0 ? (
+              <div className="mx-auto grid max-w-[570px] gap-7">
+                {activeSuggestions.map((suggestion) => (
+                  <div key={suggestion.fingerprint} className="relative ps-7 sm:ps-14">
                     <span className="pointer-events-none absolute start-0 top-0 h-11 w-7 rounded-es-[20px] border-b-2 border-s-2 border-dashed border-[#91b7ff] sm:w-10" aria-hidden="true" />
-                    <GCCSuggestionCard
-                      id={suggestion.id}
-                      kind={suggestion.kind}
-                      message={suggestion.message}
-                      exitState={exitState}
-                      onApprove={(id) => dismissSuggestion(id, "approved")}
-                      onIgnore={(id) => dismissSuggestion(id, "ignored")}
-                    />
+                    <GCCSuggestionCard suggestion={suggestion} exitState={exitStates[suggestion.fingerprint] ?? null} onApprove={(id) => dismissSuggestion(id, "approved")} onIgnore={(id) => dismissSuggestion(id, "ignored")} />
                   </div>
-                );
-              })}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="grid h-full min-h-[260px] place-items-center px-6 text-center">
+                <div className="max-w-[360px] rounded-3xl bg-white/75 px-6 py-7 shadow-sm">
+                  <h3 className="text-[15px] font-bold text-[#171b32]">Listening for clinical insights...</h3>
+                  <p className="mt-2 text-[12px] leading-5 text-slate-500">
+                    {hasTranscript ? t("session.insights.empty.groundedHint") : t("session.insights.empty.startHint")}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

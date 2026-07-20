@@ -447,3 +447,11 @@ html[dir="rtl"] .back-link {
     align-items: flex-start;
   }
 }
+@keyframes gcc-sbs-highlight-in {
+  from { background-color: transparent; transform: translateY(1px); }
+  to { transform: translateY(0); }
+}
+
+.gcc-sbs-highlight {
+  animation: gcc-sbs-highlight-in 180ms ease-out;
+}

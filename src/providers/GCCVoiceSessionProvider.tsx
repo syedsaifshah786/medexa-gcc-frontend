@@ -2,12 +2,6 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { GCC_REVIEW_DEMO_MODE } from "@/config/gcc-demo-mode";
-import {
-  createGCCDemoReviewBundle,
-  saveGCCDemoReviewBundleLocally,
-} from "@/data/gcc-demo-review-bundle";
-import type { GCCDemoTranscriptLine } from "@/data/gcc-demo-session-transcript";
 import { useGCCLocale } from "@/hooks/useGCCLocale";
 import {
   buildFinalTranscript,
@@ -17,12 +11,13 @@ import {
   removeVoiceCommands,
 } from "@/lib/gcc/transcript-utils";
 import { buildReviewBundleFromFinalizeResponse, finalizeGCCSession, saveReviewBundleLocally, saveSoapLocally } from "@/lib/gcc/session-api";
+import type { SBSMatch } from "@/types/sbs-v3";
 
 export type SessionStatus = "idle" | "command-listening" | "starting" | "recording" | "paused" | "stopping" | "stopped" | "error";
 export type PermissionState = "unknown" | "prompt" | "granted" | "denied";
 export type RecognitionMode = "off" | "ambient-command" | "session-transcription" | "paused-command-only";
 export type SessionSource = "voice" | "manual" | "restored";
-export type SessionInputMode = "web-speech" | "manual-demo";
+export type SessionInputMode = "web-speech";
 
 export type TranscriptSegment = {
   id: string;
@@ -32,7 +27,7 @@ export type TranscriptSegment = {
   confidence?: number;
   speaker?: "clinician" | "patient";
   speakerLabel?: string;
-  source?: "web-speech" | "manual-demo";
+  source?: "web-speech";
 };
 
 export type GCCSessionPatient = {
@@ -81,7 +76,7 @@ type GCCVoiceSessionContextValue = {
   pauseSession: () => void;
   resumeSession: () => void;
   stopSession: () => Promise<void>;
-  appendManualDemoTranscriptLine: (line: GCCDemoTranscriptLine) => boolean;
+  setSBSMatches: (matches: readonly SBSMatch[]) => void;
   restartRecognition: () => void;
   clearSession: () => void;
   formatElapsedTime: (value?: number) => string;
@@ -161,6 +156,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   const lastFinalTextRef = useRef("");
   const latestHeardTextRef = useRef("");
   const transcriptSegmentsRef = useRef<TranscriptSegment[]>([]);
+  const sbsMatchesRef = useRef<SBSMatch[]>([]);
   const recognitionEndWaitersRef = useRef<Array<() => void>>([]);
   const processRecognitionResultRef = useRef<(event: SpeechRecognitionEvent) => void>(() => undefined);
   const restartRecognitionRef = useRef<() => void>(() => undefined);
@@ -478,36 +474,9 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     persistSession({ transcriptSegments: nextSegments, finalTranscript: finalTranscriptRef.current });
   }, [calculateElapsed, persistSession]);
 
-  const appendManualDemoTranscriptLine = useCallback((line: GCCDemoTranscriptLine) => {
-    if (statusRef.current !== "recording" || !sessionIdRef.current) return false;
-    const cleanText = line.text.trim();
-    if (!cleanText) return false;
-    if (
-      transcriptSegmentsRef.current.some(
-        (segment) => segment.id === line.id && segment.source === "manual-demo",
-      )
-    ) {
-      return false;
-    }
-
-    const segment: TranscriptSegment = {
-      id: line.id,
-      speaker: line.speaker,
-      speakerLabel: line.speakerLabel,
-      text: cleanText,
-      isFinal: true,
-      source: "manual-demo",
-      timestampMs: calculateElapsed(),
-    };
-    const nextSegments = [...transcriptSegmentsRef.current, segment];
-    const labeledText = `${line.speakerLabel}: ${cleanText}`;
-    transcriptSegmentsRef.current = nextSegments;
-    finalTranscriptRef.current = [finalTranscriptRef.current, labeledText].filter(Boolean).join(" ");
-    setTranscriptSegments(nextSegments);
-    setFinalTranscript(finalTranscriptRef.current);
-    persistSession({ transcriptSegments: nextSegments, finalTranscript: finalTranscriptRef.current });
-    return true;
-  }, [calculateElapsed, persistSession]);
+  const setSBSMatches = useCallback((matches: readonly SBSMatch[]) => {
+    sbsMatchesRef.current = [...matches];
+  }, []);
 
   const flushRecognitionBeforeFinalize = useCallback(async () => {
     manualStopRef.current = true;
@@ -577,37 +546,22 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
         elapsedMs: frozenElapsed,
         locale,
         patient: sessionPatientRef.current ?? undefined,
+        sbsMatches: sbsMatchesRef.current,
       });
 
       if (response.saved_to_store !== true || !response.review_bundle?.soap_note || !response.review_bundle.billing_intelligence || !response.review_bundle.patient_summary) {
         throw new Error("FINALIZE_INCOMPLETE");
       }
 
-      const backendReviewBundle = buildReviewBundleFromFinalizeResponse(response, locale);
-      const reviewBundle = GCC_REVIEW_DEMO_MODE
-        ? createGCCDemoReviewBundle({
-            sessionId: id,
-            locale,
-            transcript,
-            elapsedMs: frozenElapsed,
-          })
-        : backendReviewBundle;
+      const reviewBundle = buildReviewBundleFromFinalizeResponse(response, locale);
       saveReviewBundleLocally(reviewBundle, locale);
-      if (GCC_REVIEW_DEMO_MODE) {
-        saveGCCDemoReviewBundleLocally({
-          sessionId: id,
-          locale,
-          transcript,
-          elapsedMs: frozenElapsed,
-        });
-      }
       saveSoapLocally({
         sessionId: id,
         soapNote: reviewBundle.soapNote,
         elapsedMs: frozenElapsed,
         transcript,
-        llmUsed: GCC_REVIEW_DEMO_MODE ? false : response.llm_used,
-        fallbackReason: GCC_REVIEW_DEMO_MODE ? null : response.fallback_reason,
+        llmUsed: response.llm_used,
+        fallbackReason: response.fallback_reason,
         locale,
       });
       setSafeStatus("stopped");
@@ -661,14 +615,10 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     interimTranscriptRef.current = "";
     setInterimTranscript("");
     setSafeStatus("paused");
-    if (sessionInputModeRef.current === "manual-demo") {
-      modeRef.current = "off";
-      safeStopRecognition("abort");
-    } else {
-      startRecognition("paused-command-only");
-    }
+    modeRef.current = "off";
+    safeStopRecognition("stop");
     persistSession({ status: "paused", elapsedMs: frozenElapsed });
-  }, [calculateElapsed, persistSession, safeStopRecognition, setSafeStatus, startRecognition, stopTimerInterval]);
+  }, [calculateElapsed, persistSession, safeStopRecognition, setSafeStatus, stopTimerInterval]);
 
   const resumeSession = useCallback(() => {
     if (statusRef.current === "recording") return;
@@ -681,14 +631,9 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     setStartedAt(Date.now());
     setSafeStatus("recording");
     startTimerInterval();
-    if (sessionInputModeRef.current === "manual-demo") {
-      modeRef.current = "off";
-      safeStopRecognition("abort");
-    } else {
-      startRecognition("session-transcription");
-    }
+    startRecognition("session-transcription");
     persistSession({ status: "recording" });
-  }, [persistSession, safeStopRecognition, setSafeStatus, startRecognition, startTimerInterval]);
+  }, [persistSession, setSafeStatus, startRecognition, startTimerInterval]);
 
   const clearSession = useCallback(() => {
     sessionIdRef.current = null;
@@ -698,6 +643,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     finalTranscriptRef.current = "";
     interimTranscriptRef.current = "";
     transcriptSegmentsRef.current = [];
+    sbsMatchesRef.current = [];
     lastFinalTextRef.current = "";
     accumulatedMsRef.current = 0;
     sessionStartedAtRef.current = null;
@@ -722,8 +668,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   }, [setSafeStatus]);
 
   const startSession = useCallback(async (options?: StartSessionOptions) => {
-    const inputMode = options?.inputMode ?? "web-speech";
-    if (inputMode === "web-speech" && !(await enableVoiceControl())) {
+    const inputMode: SessionInputMode = "web-speech";
+    if (!(await enableVoiceControl())) {
       return null;
     }
 
@@ -740,6 +686,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       finalTranscriptRef.current = "";
       interimTranscriptRef.current = "";
       transcriptSegmentsRef.current = [];
+      sbsMatchesRef.current = [];
       lastFinalTextRef.current = "";
       setFinalTranscript("");
       setInterimTranscript("");
@@ -752,17 +699,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     setStartedAt(Date.now());
     setSafeStatus("recording");
     startTimerInterval();
-    if (inputMode === "manual-demo") {
-      modeRef.current = "off";
-      safeStopRecognition("abort");
-      interimTranscriptRef.current = "";
-      latestHeardTextRef.current = "";
-      setInterimTranscript("");
-      setLatestHeardText("");
-      setErrorMessage(null);
-    } else {
-      startRecognition("session-transcription");
-    }
+    startRecognition("session-transcription");
     persistSession({
       sessionId: id,
       status: "recording",
@@ -771,7 +708,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       patient: sessionPatientRef.current ?? undefined,
     });
     return id;
-  }, [enableVoiceControl, persistSession, safeStopRecognition, setSafeStatus, startRecognition, startTimerInterval]);
+  }, [enableVoiceControl, persistSession, setSafeStatus, startRecognition, startTimerInterval]);
 
   const navigateToSessionFromVoice = useCallback(async () => {
     if (startNavigationInProgressRef.current) return;
@@ -838,8 +775,6 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   }, [finalizeAndNavigateToSoap, navigateToSessionFromVoice, pauseSession, resumeSession]);
 
   const processRecognitionResult = useCallback((event: SpeechRecognitionEvent) => {
-    if (sessionInputModeRef.current === "manual-demo") return;
-
     for (let index = event.resultIndex; index < event.results.length; index += 1) {
       const result = event.results[index];
       const alternative = getBestAlternative(result);
@@ -1055,7 +990,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       pauseSession,
       resumeSession,
       stopSession,
-      appendManualDemoTranscriptLine,
+      setSBSMatches,
       restartRecognition,
       clearSession,
       formatElapsedTime: (valueToFormat = elapsedMs) => formatDuration(valueToFormat),
@@ -1068,7 +1003,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       setSessionPatient,
     }),
     [
-      appendManualDemoTranscriptLine,
+      setSBSMatches,
       clearSession,
       elapsedMs,
       enableVoiceControl,

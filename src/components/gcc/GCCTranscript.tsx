@@ -158,7 +158,7 @@ export default function GCCTranscript({
       >
         <div role="log" aria-live="polite" aria-relevant="additions" className="space-y-5 sm:space-y-6">
             {finalizedSegments.map((segment) => {
-              const line = segment.source === "manual-demo" && segment.speaker
+              const line = segment.speaker
                 ? {
                     speaker: t(
                       segment.speaker === "clinician"

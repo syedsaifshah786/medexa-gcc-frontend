@@ -9,6 +9,7 @@ import type {
   GCCLiveTranscriptSegment,
 } from "@/types/gcc-live-insights";
 import type { GCCLocale } from "@/i18n/types";
+import type { SBSMatch } from "@/types/sbs-v3";
 
 const suggestionCategories = new Set<GCCLiveSuggestionCategory>([
   "protocol_question",
@@ -37,6 +38,7 @@ export type GCCLiveInsightsRequestInput = {
   existingSuggestions: readonly GCCLiveSuggestion[];
   approvedSuggestionIds: readonly string[];
   ignoredSuggestionIds: readonly string[];
+  sbsMatches: readonly SBSMatch[];
   signal: AbortSignal;
 };
 
@@ -193,6 +195,7 @@ export function parseGCCLiveInsightsResponse(
       warnings,
       summary,
     },
+    fallbackReason: readString(response, "fallbackReason", "fallback_reason") || null,
   };
 }
 
@@ -230,6 +233,7 @@ export async function requestGCCLiveInsights({
   existingSuggestions,
   approvedSuggestionIds,
   ignoredSuggestionIds,
+  sbsMatches,
   signal,
 }: GCCLiveInsightsRequestInput) {
   const apiBaseUrl = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "").replace(/\/+$/, "");
@@ -262,6 +266,18 @@ export async function requestGCCLiveInsights({
       existing_suggestions: existingSuggestions.map(serializeSuggestion),
       approved_suggestion_ids: [...new Set(approvedSuggestionIds)],
       ignored_suggestion_ids: [...new Set(ignoredSuggestionIds)],
+      sbs_matches: sbsMatches.map((match) => ({
+        id: match.id,
+        segment_id: match.segmentId,
+        code: match.code,
+        official_title: match.officialTitle,
+        matched_text: match.matchedText,
+        normalized_match: match.normalizedMatch,
+        start: match.start,
+        end: match.end,
+        confidence: match.confidence,
+        detected_at: match.detectedAt,
+      })),
     }),
   });
 

@@ -1,6 +1,7 @@
 import type { TranscriptSegment } from "@/providers/GCCVoiceSessionProvider";
 import { buildFinalTranscript, normalizeTranscript } from "@/lib/gcc/transcript-utils";
 import type { GCCLocale } from "@/i18n/types";
+import type { SBSMatch } from "@/types/sbs-v3";
 
 export type GCCSoapNote = {
   section_title?: string;
@@ -115,6 +116,8 @@ export type GCCFinalizeSessionResponse = {
   };
   llm_used: boolean;
   fallback_reason: string | null;
+  provider: "groq";
+  model: string;
   language?: GCCLocale;
   locale?: string;
 };
@@ -130,6 +133,7 @@ type FinalizePayload = {
     age: number | null;
     gender: string;
   };
+  sbsMatches: readonly SBSMatch[];
 };
 
 const emptySoapNote: GCCSoapNote = {
@@ -338,6 +342,10 @@ function validateFinalizeResponse(
 
   if (
     response.saved_to_store !== true ||
+    response.status !== "completed" ||
+    response.llm_used !== true ||
+    response.provider !== "groq" ||
+    !response.model ||
     response.language !== expectedLanguage ||
     response.locale !== expectedLocale ||
     !reviewBundle?.soap_note ||
@@ -360,6 +368,8 @@ function validateFinalizeResponse(
     },
     llm_used: response.llm_used ?? false,
     fallback_reason: response.fallback_reason ?? response.llm_fallback_reason ?? null,
+    provider: "groq",
+    model: response.model,
     language: response.language,
     locale: response.locale,
   };
@@ -430,30 +440,7 @@ export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCF
   }
 
   if (!apiBaseUrl) {
-    const bundle = createTranscriptDerivedReviewBundle({
-      sessionId: payload.sessionId,
-      transcript,
-      elapsedMs: payload.elapsedMs,
-      fallbackReason: "NEXT_PUBLIC_API_BASE_URL is not configured. Saved local transcript-derived review bundle.",
-      locale,
-    });
-
-    return {
-      session_id: payload.sessionId,
-      saved_to_store: true,
-      status: "completed",
-      transcript,
-      elapsed_ms: payload.elapsedMs,
-      review_bundle: {
-        soap_note: bundle.soapNote,
-        billing_intelligence: bundle.billingIntelligence,
-        patient_summary: bundle.patientSummary,
-      },
-      llm_used: false,
-      fallback_reason: bundle.fallbackReason ?? null,
-      language: locale,
-      locale: locale === "ar" ? "ar-SA" : "en-US",
-    };
+    throw new Error("NEXT_PUBLIC_API_BASE_URL is not configured.");
   }
 
   const controller = new AbortController();
@@ -473,6 +460,7 @@ export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCF
         transcript_segments: payload.transcriptSegments,
         elapsed_ms: payload.elapsedMs,
         patient: payload.patient ?? { name: "", age: null, gender: "" },
+        sbs_matches: payload.sbsMatches,
         generate_review_bundle: true,
       }),
     });
@@ -491,32 +479,6 @@ export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCF
       session_id: validated.session_id || payload.sessionId,
       transcript: validated.transcript || transcript,
       elapsed_ms: validated.elapsed_ms || payload.elapsedMs,
-    };
-  } catch (error) {
-    const fallbackReason = error instanceof Error ? error.message : "Backend unavailable. Saved local transcript-derived review bundle.";
-    const bundle = createTranscriptDerivedReviewBundle({
-      sessionId: payload.sessionId,
-      transcript,
-      elapsedMs: payload.elapsedMs,
-      fallbackReason,
-      locale,
-    });
-
-    return {
-      session_id: payload.sessionId,
-      saved_to_store: true,
-      status: "completed",
-      transcript,
-      elapsed_ms: payload.elapsedMs,
-      review_bundle: {
-        soap_note: bundle.soapNote,
-        billing_intelligence: bundle.billingIntelligence,
-        patient_summary: bundle.patientSummary,
-      },
-      llm_used: false,
-      fallback_reason: fallbackReason,
-      language: locale,
-      locale: locale === "ar" ? "ar-SA" : "en-US",
     };
   } finally {
     window.clearTimeout(timeoutId);

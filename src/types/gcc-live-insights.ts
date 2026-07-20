@@ -1,4 +1,5 @@
 import type { GCCLocale } from "@/i18n/types";
+import type { SBSMatch } from "@/types/sbs-v3";
 
 export type GCCLiveSuggestionCategory =
   | "protocol_question"
@@ -42,6 +43,7 @@ export type GCCLiveInsightsResponse = {
   transcriptRevision: number;
   suggestions: GCCLiveSuggestion[];
   claimReadiness: GCCClaimReadiness;
+  fallbackReason: string | null;
 };
 
 export type GCCLiveInsightsStatus = "idle" | "analyzing" | "updated" | "paused" | "unavailable";
@@ -69,6 +71,7 @@ export type UseGCCLiveInsightsOptions = {
   transcriptSegments: readonly GCCLiveTranscriptSegment[];
   elapsedMs: number;
   patient?: GCCLiveInsightsPatient | null;
+  sbsMatches?: readonly SBSMatch[];
   approvedSuggestionIds?: readonly string[];
   ignoredSuggestionIds?: readonly string[];
 };

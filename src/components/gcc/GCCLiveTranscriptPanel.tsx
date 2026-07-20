@@ -1,170 +1,121 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { ArrowDown } from "lucide-react";
-import {
-  GCC_DEMO_SESSION_TRANSCRIPT,
-  type GCCDemoTranscriptLine,
-} from "@/data/gcc-demo-session-transcript";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useGCCLocale } from "@/hooks/useGCCLocale";
 import type { SessionStatus, TranscriptSegment } from "@/providers/GCCVoiceSessionProvider";
+import type { SBSMatch } from "@/types/sbs-v3";
 
 type GCCLiveTranscriptPanelProps = {
   status: SessionStatus;
   segments: readonly TranscriptSegment[];
+  interimTranscript: string;
+  matchesBySegment: ReadonlyMap<string, readonly SBSMatch[]>;
   formatTimestamp: (timestampMs: number) => string;
-  onAppendLine: (line: GCCDemoTranscriptLine) => boolean;
 };
 
-function getRestoredProgress(segments: readonly TranscriptSegment[]) {
-  const appendedIds = new Set(
-    segments
-      .filter((segment) => segment.source === "manual-demo")
-      .map((segment) => segment.id),
-  );
-
-  let progress = 0;
-  while (
-    progress < GCC_DEMO_SESSION_TRANSCRIPT.length &&
-    appendedIds.has(GCC_DEMO_SESSION_TRANSCRIPT[progress].id)
-  ) {
-    progress += 1;
-  }
-  return progress;
+function HighlightedTranscript({ text, matches }: { text: string; matches: readonly SBSMatch[] }) {
+  if (matches.length === 0) return text;
+  const nodes: ReactNode[] = [];
+  let cursor = 0;
+  [...matches]
+    .sort((left, right) => left.start - right.start)
+    .forEach((match) => {
+      if (match.start < cursor || match.end > text.length) return;
+      if (match.start > cursor) nodes.push(text.slice(cursor, match.start));
+      nodes.push(
+        <span
+          key={match.id}
+          tabIndex={0}
+          className="gcc-sbs-highlight group relative inline rounded-md bg-gradient-to-r from-sky-100 to-emerald-100 px-1 text-slate-800 outline-none ring-sky-300 transition focus:ring-2"
+        >
+          {text.slice(match.start, match.end)}
+          <span className="pointer-events-none absolute bottom-[calc(100%+7px)] start-1/2 z-30 hidden w-max max-w-[260px] -translate-x-1/2 rounded-xl bg-[#111936] px-3 py-2 text-start text-[10px] font-semibold leading-4 text-white shadow-xl group-hover:block group-focus:block">
+            <span className="block text-emerald-300">SBS V3</span>
+            <bdi dir="ltr" className="block font-mono text-white">{match.code}</bdi>
+            <span dir="auto" className="block font-normal text-slate-200">{match.officialTitle}</span>
+          </span>
+        </span>,
+      );
+      cursor = match.end;
+    });
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return <>{nodes}</>;
 }
 
 export default function GCCLiveTranscriptPanel({
   status,
   segments,
+  interimTranscript,
+  matchesBySegment,
   formatTimestamp,
-  onAppendLine,
 }: GCCLiveTranscriptPanelProps) {
   const { t } = useGCCLocale();
   const feedRef = useRef<HTMLDivElement>(null);
-  const transcriptIndex = useMemo(() => getRestoredProgress(segments), [segments]);
-  const transcriptLineIds = useMemo(
-    () => new Set(GCC_DEMO_SESSION_TRANSCRIPT.map((line) => line.id)),
-    [],
-  );
-  const visibleTranscriptSegments = useMemo(
-    () =>
-      segments.filter(
-        (segment) =>
-          segment.isFinal &&
-          segment.source === "manual-demo" &&
-          transcriptLineIds.has(segment.id),
-      ),
-    [segments, transcriptLineIds],
-  );
-  const isComplete = transcriptIndex >= GCC_DEMO_SESSION_TRANSCRIPT.length;
-  const isPaused = status === "paused";
-  const canAdvance = status === "recording" && !isComplete;
+  const visibleSegments = segments.filter((segment) => segment.isFinal && segment.text.trim());
 
   useEffect(() => {
-    if (visibleTranscriptSegments.length === 0) return;
+    if (visibleSegments.length === 0 && !interimTranscript) return;
     const animationFrame = window.requestAnimationFrame(() => {
       const feed = feedRef.current;
       if (feed) feed.scrollTop = feed.scrollHeight;
     });
     return () => window.cancelAnimationFrame(animationFrame);
-  }, [visibleTranscriptSegments.length]);
+  }, [interimTranscript, visibleSegments.length]);
 
-  const handleNextLine = useCallback(() => {
-    if (!canAdvance) return;
-    const nextLine = GCC_DEMO_SESSION_TRANSCRIPT[transcriptIndex];
-    if (nextLine) onAppendLine(nextLine);
-  }, [canAdvance, onAppendLine, transcriptIndex]);
-
-  const helperText = isComplete
-    ? t("session.liveTranscript.stopHelper")
-    : isPaused
-      ? t("session.liveTranscript.pausedHelper")
-      : status !== "recording"
-        ? t("session.liveTranscript.startHelper")
-        : null;
+  const helperText = status === "paused"
+    ? t("session.liveTranscript.pausedHelper")
+    : status === "stopped"
+      ? t("session.liveTranscript.stopHelper")
+      : null;
+  const isEmpty = visibleSegments.length === 0 && !interimTranscript.trim();
 
   return (
-    <section
-      aria-labelledby="live-transcript-title"
-      className="mx-auto w-full max-w-[700px] rounded-[22px] border border-indigo-100 bg-white/95 p-4 shadow-[0_12px_32px_rgba(30,41,90,0.07)] sm:p-5"
-    >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 id="live-transcript-title" className="text-[17px] font-bold tracking-[-0.02em] text-[#151a36]">
-            {t("session.liveTranscript.title")}
-          </h2>
-          <p className="mt-0.5 text-[12px] text-slate-500 sm:text-[13px]">
-            {t("session.liveTranscript.subtitle")}
-          </p>
-        </div>
-        <span className="rounded-full border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-[10px] font-bold text-indigo-700">
-          {transcriptIndex}/{GCC_DEMO_SESSION_TRANSCRIPT.length}
-        </span>
-      </div>
-
-      <div
-        ref={feedRef}
-        role="log"
-        aria-live="polite"
-        aria-relevant="additions"
-        aria-label={t("session.liveTranscript.feedLabel")}
-        className="mt-3 max-h-[220px] min-h-[72px] overflow-y-auto overscroll-contain rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-3 [scrollbar-gutter:stable] sm:px-4"
-      >
-        <div className="min-h-[46px] space-y-3">
-          {visibleTranscriptSegments.map((segment, index) => {
-            const isClinician = segment.speaker === "clinician";
-            const speakerLabel = t(
-              isClinician
-                ? "session.liveTranscript.clinician"
-                : "session.liveTranscript.patient",
-            );
-            return (
-              <article
-                key={segment.id}
-                className={`gcc-live-transcript-line grid grid-cols-[48px_minmax(0,1fr)] items-start gap-3 rounded-xl border bg-white px-3 py-2.5 transition duration-300 sm:grid-cols-[54px_minmax(0,1fr)] sm:gap-4 ${
-                  isClinician ? "border-indigo-100" : "border-emerald-100"
-                }`}
-                data-newest-transcript-line={index === visibleTranscriptSegments.length - 1 ? "true" : undefined}
-              >
-                <time dir="ltr" className="pt-0.5 text-[11px] tabular-nums text-slate-400 sm:text-[12px]">
-                  {formatTimestamp(segment.timestampMs)}
-                </time>
-                <div className="min-w-0">
-                  <strong
-                    className={`text-[11px] font-bold ${
-                      isClinician ? "text-indigo-700" : "text-emerald-700"
-                    }`}
-                  >
-                    {speakerLabel}
-                    {":"}
-                  </strong>
-                  <p dir="auto" className="mt-1 text-[13px] leading-[1.45] text-slate-700 sm:text-[14px]">
-                    {segment.text}
-                  </p>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="mt-3 flex flex-col items-stretch justify-between gap-2 sm:flex-row sm:items-center">
-        <p className="min-h-4 text-[11px] font-medium text-slate-500">
-          {helperText}
+    <section aria-labelledby="live-transcript-title" className="mx-auto w-full max-w-[700px] rounded-[22px] border border-indigo-100 bg-white/95 p-4 shadow-[0_12px_32px_rgba(30,41,90,0.07)] sm:p-5">
+      <div>
+        <h2 id="live-transcript-title" className="text-[17px] font-bold tracking-[-0.02em] text-[#151a36]">
+          {t("session.liveTranscript.title")}
+        </h2>
+        <p className="mt-0.5 text-[12px] text-slate-500 sm:text-[13px]">
+          {t("session.liveTranscript.subtitle")}
         </p>
-        <button
-          type="button"
-          aria-label={t("session.liveTranscript.nextAriaLabel")}
-          disabled={!canAdvance}
-          onClick={handleNextLine}
-          className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-full bg-[#111936] px-4 text-[11px] font-bold text-white shadow-sm transition hover:bg-indigo-950 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none"
-        >
-          {isComplete
-            ? t("session.liveTranscript.complete")
-            : t("session.liveTranscript.next")}
-          {!isComplete && <ArrowDown className="size-3.5" aria-hidden="true" />}
-        </button>
       </div>
+
+      <div ref={feedRef} role="log" aria-live="polite" aria-relevant="additions text" aria-label={t("session.liveTranscript.feedLabel")} className="mt-3 max-h-[260px] min-h-[96px] overflow-y-auto overscroll-contain rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-3 [scrollbar-gutter:stable] sm:px-4">
+        {isEmpty ? (
+          <p className="grid min-h-[70px] place-items-center text-center text-[13px] font-medium text-slate-400">
+            Listening for the conversation...
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {visibleSegments.map((segment) => {
+              const isClinician = segment.speaker === "clinician";
+              const speakerLabel = segment.speakerLabel || (segment.speaker
+                ? t(isClinician ? "session.liveTranscript.clinician" : "session.liveTranscript.patient")
+                : null);
+              return (
+                <article key={segment.id} className={`gcc-live-transcript-line grid grid-cols-[48px_minmax(0,1fr)] items-start gap-3 rounded-xl border bg-white px-3 py-2.5 sm:grid-cols-[54px_minmax(0,1fr)] sm:gap-4 ${isClinician ? "border-indigo-100" : "border-emerald-100"}`}>
+                  <time dir="ltr" className="pt-0.5 text-[11px] tabular-nums text-slate-400 sm:text-[12px]">{formatTimestamp(segment.timestampMs)}</time>
+                  <div className="min-w-0">
+                    {speakerLabel && <strong dir="auto" className={`text-[11px] font-bold ${isClinician ? "text-indigo-700" : "text-emerald-700"}`}>{speakerLabel}:</strong>}
+                    <p dir="auto" className="mt-1 text-[13px] leading-[1.55] text-slate-700 sm:text-[14px]">
+                      <HighlightedTranscript text={segment.text} matches={matchesBySegment.get(segment.id) ?? []} />
+                    </p>
+                  </div>
+                </article>
+              );
+            })}
+            {interimTranscript.trim() && (
+              <article className="grid grid-cols-[48px_minmax(0,1fr)] items-start gap-3 rounded-xl border border-dashed border-sky-200 bg-sky-50/50 px-3 py-2.5 opacity-85 sm:grid-cols-[54px_minmax(0,1fr)] sm:gap-4">
+                <time dir="ltr" className="pt-0.5 text-[11px] tabular-nums text-slate-400">{t("session.transcript.now")}</time>
+                <p dir="auto" className="text-[13px] italic leading-[1.55] text-slate-600 sm:text-[14px]">
+                  <HighlightedTranscript text={interimTranscript} matches={matchesBySegment.get("interim") ?? []} />
+                </p>
+              </article>
+            )}
+          </div>
+        )}
+      </div>
+      {helperText && <p className="mt-3 text-[11px] font-medium text-slate-500">{helperText}</p>}
     </section>
   );
 }

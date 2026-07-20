@@ -11,6 +11,7 @@ import GCCSessionHero from "@/components/gcc/GCCSessionHero";
 import { useGCCLocale } from "@/hooks/useGCCLocale";
 import { useGCCLiveInsights } from "@/hooks/useGCCLiveInsights";
 import { useGCCVoiceSession } from "@/hooks/useGCCVoiceSession";
+import { useSBSKeywordDetection } from "@/hooks/useSBSKeywordDetection";
 
 export default function GCCSessionPage() {
   return (
@@ -22,7 +23,7 @@ export default function GCCSessionPage() {
 
 function GCCSessionPageContent() {
   const searchParams = useSearchParams();
-  const hasStartedManualDemoRef = useRef(false);
+  const hasStartedLiveSessionRef = useRef(false);
   const { locale, t, formatNumber, formatSessionProgress } = useGCCLocale();
   const {
     sessionId,
@@ -30,6 +31,8 @@ function GCCSessionPageContent() {
     finalTranscript,
     transcriptSegments,
     interimTranscript,
+    errorMessage,
+    permissionStatus,
     finalizationMessage,
     finalizationError,
     formatElapsedTime,
@@ -38,22 +41,22 @@ function GCCSessionPageContent() {
     pauseSession,
     resumeSession,
     stopSession,
-    appendManualDemoTranscriptLine,
     retryFinalize,
     setSessionPatient,
+    setSBSMatches,
   } = useGCCVoiceSession();
 
   const patientId = searchParams.get("patientId")?.trim() || null;
-  const patientName = searchParams.get("patientName")?.trim() || "Samuel Thompson";
+  const patientName = searchParams.get("patientName")?.trim() || "Patient";
   const patientSessionType = searchParams.get("sessionType")?.trim() || null;
   const patientAvatar =
     searchParams.get("avatarUrl")?.trim() ||
-    (patientName === "Samuel Thompson" ? "https://i.pravatar.cc/96?img=12" : null);
-  const patientAge = searchParams.get("patientAge")?.trim() || "58";
-  const patientGender = searchParams.get("patientGender")?.trim() || "M";
-  const completedSessions = searchParams.get("completedSessions")?.trim() || "04";
-  const totalSessions = searchParams.get("totalSessions")?.trim() || "12";
-  const isPatientVerified = searchParams.get("verified") !== "0";
+    null;
+  const patientAge = searchParams.get("patientAge")?.trim() || "";
+  const patientGender = searchParams.get("patientGender")?.trim() || "";
+  const completedSessions = searchParams.get("completedSessions")?.trim() || "";
+  const totalSessions = searchParams.get("totalSessions")?.trim() || "";
+  const isPatientVerified = searchParams.get("verified") === "1";
   const patient = useMemo(
     () => ({ id: patientId, name: patientName, sessionType: patientSessionType }),
     [patientId, patientName, patientSessionType],
@@ -75,7 +78,8 @@ function GCCSessionPageContent() {
   const isRecording = status === "recording";
   const isPaused = status === "paused";
   const isFinalizing = status === "stopping";
-  useGCCLiveInsights({
+  const sbsDetection = useSBSKeywordDetection(transcriptSegments, interimTranscript);
+  const liveInsights = useGCCLiveInsights({
     locale,
     sessionId,
     isRecording,
@@ -86,19 +90,22 @@ function GCCSessionPageContent() {
     transcriptSegments,
     elapsedMs,
     patient,
+    sbsMatches: sbsDetection.matches,
   });
+  useEffect(() => {
+    setSBSMatches(sbsDetection.finalizedMatches);
+  }, [sbsDetection.finalizedMatches, setSBSMatches]);
   useEffect(() => {
     setSessionPatient(sessionPatient);
   }, [sessionPatient, setSessionPatient]);
 
   useEffect(() => {
-    if (hasStartedManualDemoRef.current) return;
-    hasStartedManualDemoRef.current = true;
+    if (hasStartedLiveSessionRef.current) return;
+    hasStartedLiveSessionRef.current = true;
     const requestedSessionId = searchParams.get("sessionId") ?? undefined;
     void startSession({
       sessionId: requestedSessionId,
       source: "manual",
-      inputMode: "manual-demo",
       preserveTranscript: Boolean(requestedSessionId && requestedSessionId === sessionId),
       patient: sessionPatient,
     });
@@ -110,22 +117,22 @@ function GCCSessionPageContent() {
     .map((part) => part[0]?.toUpperCase())
     .join("");
   const numericPatientAge = Number(patientAge);
-  const displayedAge = Number.isFinite(numericPatientAge)
+  const displayedAge = patientAge && Number.isFinite(numericPatientAge)
     ? formatNumber(numericPatientAge)
-    : patientAge;
+    : "—";
   const normalizedGender = patientGender.toLocaleLowerCase("en-US");
   const displayedGender =
     normalizedGender === "m" || normalizedGender === "male"
       ? t("session.page.gender.male")
       : normalizedGender === "f" || normalizedGender === "female"
         ? t("session.page.gender.female")
-        : patientGender || t("session.page.gender.other");
+        : patientGender || "—";
   const numericCompletedSessions = Number(completedSessions);
   const numericTotalSessions = Number(totalSessions);
   const sessionProgress =
-    Number.isFinite(numericCompletedSessions) && Number.isFinite(numericTotalSessions)
+    completedSessions && totalSessions && Number.isFinite(numericCompletedSessions) && Number.isFinite(numericTotalSessions) && numericTotalSessions > 0
       ? formatSessionProgress(numericCompletedSessions, numericTotalSessions)
-      : `${completedSessions} / ${totalSessions}`;
+      : "—";
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_50%_12%,rgba(238,242,255,0.7),transparent_34%),linear-gradient(180deg,#ffffff_0%,#fdfdff_100%)] text-slate-900">
@@ -181,19 +188,26 @@ function GCCSessionPageContent() {
             </div>
           </div>
 
-          <GCCClaimQualityDropdown />
+          <GCCClaimQualityDropdown readiness={liveInsights.claimReadiness} insightStatus={liveInsights.status} sessionStatus={status} lastUpdatedAt={liveInsights.lastUpdatedAt} segmentCount={transcriptSegments.length} hasTranscript={Boolean(finalTranscript || interimTranscript)} sbsMatchCount={sbsDetection.matches.length} />
         </section>
 
         <div className="mx-auto w-full max-w-[820px]">
           <GCCSessionHero
             timer={formatElapsedTime(elapsedMs)}
             status={status}
-            isManualDemo
-            onStartRecording={() => void startSession({ sessionId: sessionId ?? undefined, source: "manual", inputMode: "manual-demo", preserveTranscript: true, patient: sessionPatient })}
+            onStartRecording={() => void startSession({ sessionId: sessionId ?? undefined, source: "manual", preserveTranscript: true, patient: sessionPatient })}
             onPauseRecording={pauseSession}
             onResumeRecording={resumeSession}
             onStopRecording={stopSession}
           />
+
+          {errorMessage && (
+            <div role="alert" className="mx-auto mt-3 flex w-full max-w-[700px] flex-wrap items-center justify-center gap-2 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-center text-amber-800 shadow-sm">
+              <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+              <p className="text-[12px] font-bold">{errorMessage}</p>
+              {permissionStatus === "denied" && <button type="button" onClick={() => void startSession({ sessionId: sessionId ?? undefined, source: "manual", preserveTranscript: true, patient: sessionPatient })} className="ms-1 h-8 rounded-full bg-[#111936] px-3 text-[11px] font-bold text-white">Retry Microphone</button>}
+            </div>
+          )}
 
           {(finalizationMessage || finalizationError) && (
             <div
@@ -220,10 +234,11 @@ function GCCSessionPageContent() {
             <GCCLiveTranscriptPanel
               status={status}
               segments={transcriptSegments}
+              interimTranscript={interimTranscript}
+              matchesBySegment={sbsDetection.matchesBySegment}
               formatTimestamp={formatElapsedTime}
-              onAppendLine={appendManualDemoTranscriptLine}
             />
-            <GCCInsightsSheet />
+            <GCCInsightsSheet suggestions={liveInsights.suggestions} status={liveInsights.status} lastUpdatedAt={liveInsights.lastUpdatedAt} hasTranscript={Boolean(finalTranscript || interimTranscript)} onApprove={liveInsights.approveSuggestion} onIgnore={liveInsights.ignoreSuggestion} />
           </div>
         </div>
       </main>

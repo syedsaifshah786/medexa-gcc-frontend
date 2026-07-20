@@ -14,6 +14,7 @@ import type {
   UseGCCLiveInsightsOptions,
   UseGCCLiveInsightsResult,
 } from "@/types/gcc-live-insights";
+import type { SBSMatch } from "@/types/sbs-v3";
 
 const interimStabilityMs = 1_100;
 const requestDebounceMs = 1_800;
@@ -49,6 +50,7 @@ type RequestCandidate = {
   transcriptSegments: readonly GCCLiveTranscriptSegment[];
   elapsedMs: number;
   patient: GCCLiveInsightsPatient | null | undefined;
+  sbsMatches: readonly SBSMatch[];
 };
 
 const initialState: InsightsState = {
@@ -255,6 +257,7 @@ export function useGCCLiveInsights({
   transcriptSegments,
   elapsedMs,
   patient,
+  sbsMatches = [],
   approvedSuggestionIds = emptyIds,
   ignoredSuggestionIds = emptyIds,
 }: UseGCCLiveInsightsOptions): UseGCCLiveInsightsResult {
@@ -283,6 +286,7 @@ export function useGCCLiveInsights({
     transcriptSegments: [],
     elapsedMs: 0,
     patient: null,
+    sbsMatches: [],
   });
   const debounceTimerRef = useRef<number | null>(null);
   const forceTimerRef = useRef<number | null>(null);
@@ -346,8 +350,9 @@ export function useGCCLiveInsights({
       transcriptSegments,
       elapsedMs,
       patient,
+      sbsMatches,
     };
-  }, [elapsedMs, isFinalizing, isPaused, isRecording, locale, patient, requestTranscript, sessionId, transcriptSegments]);
+  }, [elapsedMs, isFinalizing, isPaused, isRecording, locale, patient, requestTranscript, sbsMatches, sessionId, transcriptSegments]);
 
   const clearDebounceTimer = useCallback(() => {
     if (debounceTimerRef.current !== null) {
@@ -453,6 +458,7 @@ export function useGCCLiveInsights({
         existingSuggestions,
         approvedSuggestionIds: approvedExclusions,
         ignoredSuggestionIds: ignoredExclusions,
+        sbsMatches: candidate.sbsMatches,
         signal: controller.signal,
       });
 
@@ -493,7 +499,7 @@ export function useGCCLiveInsights({
         locale: candidate.locale,
         suggestions: nextSuggestions,
         claimReadiness: response.claimReadiness,
-        status: "updated",
+        status: response.fallbackReason ? "unavailable" : "updated",
         lastUpdatedAt: updatedAt,
       });
     } catch (error) {

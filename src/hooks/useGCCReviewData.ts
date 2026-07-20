@@ -2,11 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { GCC_REVIEW_DEMO_MODE } from "@/config/gcc-demo-mode";
-import {
-  createGCCDemoReviewBundle,
-  saveGCCDemoReviewBundleLocally,
-} from "@/data/gcc-demo-review-bundle";
 import { useGCCLocale } from "@/hooks/useGCCLocale";
 import {
   fetchGCCReviewBundle,
@@ -65,45 +60,8 @@ export function useGCCReviewData(): GCCReviewData {
     setRefreshNonce((value) => value + 1);
   }, []);
 
-  const demoBundle = useMemo(
-    () => createGCCDemoReviewBundle({
-      sessionId: sessionId ?? "gcc-demo-review",
-      locale,
-      transcript: bundle?.sessionId === sessionId ? bundle.transcript : "",
-      elapsedMs: bundle?.sessionId === sessionId ? bundle.elapsedMs : 0,
-    }),
-    [bundle, locale, sessionId],
-  );
-
   useEffect(() => {
     let isMounted = true;
-
-    if (GCC_REVIEW_DEMO_MODE) {
-      if (sessionId) {
-        const cachedBundle = readReviewBundleFromCache(sessionId, locale);
-        const visibleBundle = createGCCDemoReviewBundle({
-          sessionId,
-          locale,
-          transcript: cachedBundle?.transcript ?? "",
-          elapsedMs: cachedBundle?.elapsedMs ?? 0,
-        });
-        saveGCCDemoReviewBundleLocally({
-          sessionId,
-          locale,
-          transcript: visibleBundle.transcript,
-          elapsedMs: visibleBundle.elapsedMs,
-        });
-        queueMicrotask(() => {
-          if (!isMounted) return;
-          setBundle(visibleBundle);
-          setStatus("ready");
-          setError(null);
-        });
-      }
-      return () => {
-        isMounted = false;
-      };
-    }
 
     if (!sessionId) {
       queueMicrotask(() => {
@@ -164,11 +122,8 @@ export function useGCCReviewData(): GCCReviewData {
 
   const currentBundle =
     bundle?.sessionId === sessionId && bundle.locale === locale ? bundle : null;
-  const displayedBundle = GCC_REVIEW_DEMO_MODE ? demoBundle : currentBundle;
-  const mappedBundle = useMemo(() => applyBundle(displayedBundle), [displayedBundle]);
-  const currentStatus = GCC_REVIEW_DEMO_MODE
-    ? "ready"
-    : !sessionId
+  const mappedBundle = useMemo(() => applyBundle(currentBundle), [currentBundle]);
+  const currentStatus = !sessionId
     ? "waiting-for-session"
     : status === "ready" && !currentBundle
       ? "loading"
@@ -182,7 +137,7 @@ export function useGCCReviewData(): GCCReviewData {
     patientSummary: mappedBundle.patientSummary,
     transcript: mappedBundle.transcript,
     elapsedMs: mappedBundle.elapsedMs,
-    error: GCC_REVIEW_DEMO_MODE ? null : error,
+    error,
     refresh,
   };
 }

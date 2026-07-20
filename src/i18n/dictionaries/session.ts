@@ -12,15 +12,12 @@ const en = {
 
   "session.liveTranscript.title": "Live Transcript",
   "session.liveTranscript.subtitle": "Session conversation in progress",
-  "session.liveTranscript.next": "Next Transcript Line",
-  "session.liveTranscript.complete": "Transcript Complete",
   "session.liveTranscript.stopHelper": "Use the Stop button to complete and finalize the session.",
   "session.liveTranscript.pausedHelper": "Resume the session to advance the transcript.",
   "session.liveTranscript.startHelper": "Start the session to advance the transcript.",
   "session.liveTranscript.clinician": "Clinician",
   "session.liveTranscript.patient": "Patient",
   "session.liveTranscript.feedLabel": "Live transcript conversation",
-  "session.liveTranscript.nextAriaLabel": "Show next transcript line",
 
   "session.hero.controls": "Recording controls",
   "session.hero.sayPrefix": "Say",
@@ -37,7 +34,6 @@ const en = {
   "session.hero.start": "Start session",
   "session.hero.stopFinalize": "Stop and finalize session",
   "session.hero.elapsedTime": "Elapsed session time",
-  "session.hero.manualRecording": "Ambient recording in progress",
 
   "session.transcript.title": "Live Transcription",
   "session.transcript.status": "Transcript status: {status}",
@@ -213,15 +209,12 @@ const ar = {
 
   "session.liveTranscript.title": "النص المباشر",
   "session.liveTranscript.subtitle": "محادثة الجلسة جارية",
-  "session.liveTranscript.next": "السطر التالي من الحوار",
-  "session.liveTranscript.complete": "اكتمل النص",
   "session.liveTranscript.stopHelper": "استخدم زر الإيقاف لإكمال الجلسة وإنهائها.",
   "session.liveTranscript.pausedHelper": "استأنف الجلسة للتقدّم في النص.",
   "session.liveTranscript.startHelper": "ابدأ الجلسة للتقدّم في النص.",
   "session.liveTranscript.clinician": "الأخصائي",
   "session.liveTranscript.patient": "المريض",
   "session.liveTranscript.feedLabel": "محادثة النص المباشر",
-  "session.liveTranscript.nextAriaLabel": "عرض السطر التالي من الحوار",
 
   "session.hero.controls": "عناصر التحكم في التسجيل",
   "session.hero.sayPrefix": "قل",
@@ -238,7 +231,6 @@ const ar = {
   "session.hero.start": "بدء الجلسة",
   "session.hero.stopFinalize": "إيقاف الجلسة وإنهاؤها",
   "session.hero.elapsedTime": "الوقت المنقضي للجلسة",
-  "session.hero.manualRecording": "جارٍ التسجيل المحيطي",
 
   "session.transcript.title": "التفريغ النصي المباشر",
   "session.transcript.status": "حالة التفريغ النصي: {status}",
