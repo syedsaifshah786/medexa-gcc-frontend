@@ -2,6 +2,11 @@ import type { GCCLocale } from "@/i18n/types";
 import type { SBSMatch } from "@/types/sbs-v3";
 
 export type GCCLiveSuggestionCategory =
+  | "clinical"
+  | "protocol"
+  | "protocol_ask"
+  | "detected"
+  | "warning"
   | "protocol_question"
   | "clinical_prompt"
   | "documentation"
@@ -20,7 +25,7 @@ export type GCCLiveSuggestion = {
   category: GCCLiveSuggestionCategory;
   title: string;
   message: string;
-  evidence: string;
+  evidence: string | null;
   priority: GCCLiveSuggestionPriority;
   confidence: number | null;
   actionLabel: string;
@@ -49,7 +54,7 @@ export type GCCLiveInsightsResponse = {
   model: string;
 };
 
-export type GCCLiveInsightsStatus = "idle" | "analyzing" | "updated" | "paused" | "unavailable";
+export type GCCLiveInsightsStatus = "idle" | "analyzing" | "retrying" | "updated" | "paused" | "unavailable";
 
 export type GCCLiveInsightsPatient = {
   id: string | null;

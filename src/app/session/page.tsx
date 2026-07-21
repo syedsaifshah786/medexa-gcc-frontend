@@ -270,7 +270,7 @@ function GCCSessionPageContent() {
               matchesBySegment={sbsDetection.matchesBySegment}
               formatTimestamp={formatElapsedTime}
             />
-            <GCCInsightsSheet suggestions={liveInsights.suggestions} status={liveInsights.status} lastUpdatedAt={liveInsights.lastUpdatedAt} hasTranscript={Boolean(finalTranscript || interimTranscript)} onApprove={liveInsights.approveSuggestion} onIgnore={liveInsights.ignoreSuggestion} />
+            <GCCInsightsSheet activeSuggestions={liveInsights.activeSuggestions} status={liveInsights.status} lastUpdatedAt={liveInsights.lastUpdatedAt} hasTranscript={Boolean(finalTranscript || interimTranscript)} onApprove={liveInsights.approveSuggestion} onIgnore={liveInsights.ignoreSuggestion} />
           </div>
         </div>
       </main>

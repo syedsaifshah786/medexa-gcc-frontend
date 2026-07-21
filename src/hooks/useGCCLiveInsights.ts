@@ -4,6 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { translate } from "@/i18n";
 import type { GCCLocale } from "@/i18n/types";
 import { requestGCCLiveInsights } from "@/lib/gcc/live-insights-api";
+import {
+  activeLiveSuggestions,
+  suggestionMatchesIds,
+  upsertLiveSuggestions,
+  withLiveSuggestionStatuses,
+} from "@/lib/live-insights/upsert-live-suggestions";
 import { formatNumber, GCC_LOCALE_TAGS } from "@/lib/i18n/formatters";
 import type {
   GCCClaimReadiness,
@@ -16,10 +22,12 @@ import type {
 } from "@/types/gcc-live-insights";
 import type { SBSMatch } from "@/types/sbs-v3";
 
-const requestDebounceMs = 3_000;
-const minimumChangedCharacters = 40;
+const interimStabilityMs = 1_200;
+const requestDebounceMs = 2_200;
+const maximumWaitMs = 5_000;
+const minimumChangedCharacters = 25;
 const minimumRequestIntervalMs = 2_500;
-const minimumSuccessfulIntervalMs = 7_000;
+const minimumSuccessfulIntervalMs = 4_000;
 const rollingTranscriptCharacters = 1_600;
 const recentSegmentLimit = 8;
 const emptyIds: readonly string[] = [];
@@ -33,12 +41,21 @@ type InsightsState = {
   lastUpdatedAt: number | null;
 };
 
+type StableInterimState = {
+  sessionId: string | null;
+  locale: GCCLocale | null;
+  source: string;
+  value: string;
+};
+
 type RequestCandidate = {
   sessionId: string | null;
   locale: GCCLocale;
   isRecording: boolean;
   isPaused: boolean;
   isFinalizing: boolean;
+  isProvisional: boolean;
+  provisionalText: string;
   transcript: string;
   transcriptSegments: readonly GCCLiveTranscriptSegment[];
   elapsedMs: number;
@@ -60,6 +77,14 @@ function normalizeTranscript(value: string) {
     .replace(/\s+/g, " ")
     .replace(/\s+([,.!?;:،؛؟])/g, "$1")
     .trim();
+}
+
+function joinTranscript(finalizedTranscript: string, stableInterimTranscript: string) {
+  const finalized = normalizeTranscript(finalizedTranscript);
+  const interim = normalizeTranscript(stableInterimTranscript);
+  if (!interim) return finalized;
+  if (finalized.toLocaleLowerCase().endsWith(interim.toLocaleLowerCase())) return finalized;
+  return normalizeTranscript(`${finalized} ${interim}`);
 }
 
 function countChangedCharacters(previous: string, next: string) {
@@ -123,67 +148,6 @@ function normalizedIdSet(ids: readonly string[]) {
   return new Set(ids.map((id) => id.trim()).filter(Boolean));
 }
 
-function suggestionMatchesIds(suggestion: GCCLiveSuggestion, ids: ReadonlySet<string>) {
-  return ids.has(suggestion.fingerprint) || ids.has(suggestion.id);
-}
-
-function withExclusionStatuses(
-  suggestions: readonly GCCLiveSuggestion[],
-  approvedIds: ReadonlySet<string>,
-  ignoredIds: ReadonlySet<string>,
-) {
-  return suggestions.map((suggestion) => {
-    if (suggestion.status === "approved" || suggestion.status === "ignored") {
-      return suggestion;
-    }
-    if (suggestionMatchesIds(suggestion, approvedIds)) {
-      return { ...suggestion, status: "approved" as const };
-    }
-    if (suggestionMatchesIds(suggestion, ignoredIds)) {
-      return { ...suggestion, status: "ignored" as const };
-    }
-    return suggestion;
-  });
-}
-
-function upsertSuggestions(
-  currentSuggestions: readonly GCCLiveSuggestion[],
-  incomingSuggestions: readonly GCCLiveSuggestion[],
-  approvedIds: ReadonlySet<string>,
-  ignoredIds: ReadonlySet<string>,
-) {
-  const suggestionsByFingerprint = new Map(
-    currentSuggestions.map((suggestion) => [suggestion.fingerprint, suggestion]),
-  );
-
-  incomingSuggestions.forEach((incoming) => {
-    if (incoming.status === "resolved") {
-      suggestionsByFingerprint.delete(incoming.fingerprint);
-      return;
-    }
-
-    const existing = suggestionsByFingerprint.get(incoming.fingerprint);
-    let status = incoming.status;
-    if (existing?.status === "approved" || existing?.status === "ignored") {
-      status = existing.status;
-    } else if (suggestionMatchesIds(incoming, approvedIds)) {
-      status = "approved";
-    } else if (suggestionMatchesIds(incoming, ignoredIds)) {
-      status = "ignored";
-    }
-
-    suggestionsByFingerprint.set(incoming.fingerprint, {
-      ...existing,
-      ...incoming,
-      id: existing?.id ?? incoming.id,
-      createdAt: existing?.createdAt ?? incoming.createdAt,
-      status,
-    });
-  });
-
-  return [...suggestionsByFingerprint.values()];
-}
-
 function collectExclusionIds(
   sourceIds: ReadonlySet<string>,
   suggestions: readonly GCCLiveSuggestion[],
@@ -213,7 +177,7 @@ function readinessFromActiveSuggestions(
   suggestions: readonly GCCLiveSuggestion[],
   locale: GCCLocale,
 ): GCCClaimReadiness {
-  const activeSuggestions = suggestions.filter((suggestion) => suggestion.status === "active");
+  const activeSuggestions = activeLiveSuggestions(suggestions);
   const blockingIssues = activeSuggestions.filter((suggestion) => suggestion.claimImpact === "blocking").length;
   const warnings = activeSuggestions.filter((suggestion) => suggestion.claimImpact === "warning").length;
 
@@ -256,6 +220,7 @@ export function useGCCLiveInsights({
   isFinalizing,
   transcriptRevision,
   finalizedTranscript,
+  interimTranscript,
   transcriptSegments,
   elapsedMs,
   patient,
@@ -264,6 +229,12 @@ export function useGCCLiveInsights({
   ignoredSuggestionIds = emptyIds,
 }: UseGCCLiveInsightsOptions): UseGCCLiveInsightsResult {
   const [state, setState] = useState<InsightsState>(initialState);
+  const [stableInterimState, setStableInterimState] = useState<StableInterimState>({
+    sessionId: null,
+    locale: null,
+    source: "",
+    value: "",
+  });
 
   const activeSessionIdRef = useRef<string | null>(null);
   const activeLocaleRef = useRef<GCCLocale>(locale);
@@ -278,6 +249,8 @@ export function useGCCLiveInsights({
     isRecording: false,
     isPaused: false,
     isFinalizing: false,
+    isProvisional: false,
+    provisionalText: "",
     transcript: "",
     transcriptSegments: [],
     elapsedMs: 0,
@@ -285,6 +258,7 @@ export function useGCCLiveInsights({
     sbsMatches: [],
   });
   const debounceTimerRef = useRef<number | null>(null);
+  const forceTimerRef = useRef<number | null>(null);
   const liveInsightsAbortControllerRef = useRef<AbortController | null>(null);
   const liveInsightsInFlightRef = useRef(false);
   const requestSequenceRef = useRef(0);
@@ -293,16 +267,40 @@ export function useGCCLiveInsights({
   const lastAnalyzedRevisionRef = useRef(0);
   const lastAnalyzedTextLengthRef = useRef(0);
   const lastObservedTranscriptRef = useRef("");
+  const lastObservedFinalRevisionRef = useRef(0);
   const lastRequestedTranscriptRef = useRef("");
   const lastAcceptedTranscriptRef = useRef("");
   const lastRequestedAtRef = useRef(0);
   const lastSuccessfulRequestAtRef = useRef(0);
+  const lastAnalyzedWasProvisionalRef = useRef(false);
   const pendingChangeStartedAtRef = useRef<number | null>(null);
   const runRequestRef = useRef<() => Promise<void>>(async () => undefined);
 
+  const normalizedInterimTranscript = useMemo(
+    () => normalizeTranscript(interimTranscript),
+    [interimTranscript],
+  );
+  useEffect(() => {
+    if (!normalizedInterimTranscript) return;
+    const timer = window.setTimeout(() => {
+      setStableInterimState({
+        sessionId,
+        locale,
+        source: normalizedInterimTranscript,
+        value: normalizedInterimTranscript,
+      });
+    }, interimStabilityMs);
+    return () => window.clearTimeout(timer);
+  }, [locale, normalizedInterimTranscript, sessionId]);
+  const stableInterimTranscript =
+    stableInterimState.sessionId === sessionId
+    && stableInterimState.locale === locale
+    && stableInterimState.source === normalizedInterimTranscript
+      ? stableInterimState.value
+      : "";
   const requestTranscript = useMemo(
-    () => normalizeTranscript(finalizedTranscript),
-    [finalizedTranscript],
+    () => joinTranscript(finalizedTranscript, stableInterimTranscript),
+    [finalizedTranscript, stableInterimTranscript],
   );
 
   const externalApprovedIds = useMemo(() => normalizedIdSet(approvedSuggestionIds), [approvedSuggestionIds]);
@@ -320,13 +318,15 @@ export function useGCCLiveInsights({
       isRecording,
       isPaused,
       isFinalizing,
+      isProvisional: Boolean(stableInterimTranscript),
+      provisionalText: stableInterimTranscript,
       transcript: requestTranscript,
       transcriptSegments,
       elapsedMs,
       patient,
       sbsMatches,
     };
-  }, [elapsedMs, isFinalizing, isPaused, isRecording, locale, patient, requestTranscript, sbsMatches, sessionId, transcriptSegments]);
+  }, [elapsedMs, isFinalizing, isPaused, isRecording, locale, patient, requestTranscript, sbsMatches, sessionId, stableInterimTranscript, transcriptSegments]);
 
   const clearDebounceTimer = useCallback(() => {
     if (debounceTimerRef.current !== null) {
@@ -337,6 +337,10 @@ export function useGCCLiveInsights({
 
   const clearScheduledRequests = useCallback(() => {
     clearDebounceTimer();
+    if (forceTimerRef.current !== null) {
+      window.clearTimeout(forceTimerRef.current);
+      forceTimerRef.current = null;
+    }
     pendingChangeStartedAtRef.current = null;
   }, [clearDebounceTimer]);
 
@@ -372,7 +376,11 @@ export function useGCCLiveInsights({
     const requestRevision = analysisRevisionRef.current;
     const changedCharacters = countChangedCharacters(lastAcceptedTranscriptRef.current, candidate.transcript);
     const lengthGrowth = Math.abs(candidate.transcript.length - lastAnalyzedTextLengthRef.current);
-    if (requestRevision <= lastAnalyzedRevisionRef.current || Math.max(changedCharacters, lengthGrowth) < minimumChangedCharacters) {
+    const replacesProvisional = lastAnalyzedWasProvisionalRef.current && !candidate.isProvisional;
+    if (
+      requestRevision <= lastAnalyzedRevisionRef.current
+      || (!replacesProvisional && Math.max(changedCharacters, lengthGrowth) < minimumChangedCharacters)
+    ) {
       return;
     }
 
@@ -404,7 +412,7 @@ export function useGCCLiveInsights({
     const approvedIds = mergedApprovedIds();
     const ignoredIds = mergedIgnoredIds();
     approvedIds.forEach((id) => ignoredIds.delete(id));
-    const existingSuggestions = withExclusionStatuses(suggestionsRef.current, approvedIds, ignoredIds);
+    const existingSuggestions = withLiveSuggestionStatuses(suggestionsRef.current, approvedIds, ignoredIds);
     const approvedExclusions = collectExclusionIds(approvedIds, existingSuggestions, "approved");
     const ignoredExclusions = collectExclusionIds(ignoredIds, existingSuggestions, "ignored");
 
@@ -428,7 +436,19 @@ export function useGCCLiveInsights({
 
     try {
       const recentTranscript = latestTranscriptWindow(candidate.transcript);
-      const recentSegments = latestFinalSegments(candidate.transcriptSegments);
+      const finalizedSegments = latestFinalSegments(candidate.transcriptSegments);
+      const recentSegments = candidate.isProvisional && candidate.provisionalText
+        ? [
+            ...finalizedSegments.slice(-(recentSegmentLimit - 1)),
+            {
+              id: `provisional-${requestRevision}`,
+              speaker: "unknown" as const,
+              text: candidate.provisionalText,
+              timestampMs: candidate.elapsedMs,
+              isFinal: false,
+            },
+          ]
+        : finalizedSegments;
       const response = await requestGCCLiveInsights({
         locale: candidate.locale,
         sessionId: candidate.sessionId,
@@ -464,7 +484,9 @@ export function useGCCLiveInsights({
           current.sessionId === candidate.sessionId && current.locale === candidate.locale
             ? {
                 ...current,
-                status: retryableFallback ? "analyzing" : "unavailable",
+                status: response.fallbackReason === "rate_limited"
+                  ? "retrying"
+                  : retryableFallback ? "analyzing" : "unavailable",
               }
             : current,
         );
@@ -482,11 +504,12 @@ export function useGCCLiveInsights({
 
       lastAnalyzedRevisionRef.current = response.transcriptRevision;
       lastAnalyzedTextLengthRef.current = candidate.transcript.length;
+      lastAnalyzedWasProvisionalRef.current = candidate.isProvisional;
       lastSuccessfulRequestAtRef.current = Date.now();
 
       const currentApprovedIds = mergedApprovedIds();
       const currentIgnoredIds = mergedIgnoredIds();
-      const nextSuggestions = upsertSuggestions(
+      const nextSuggestions = upsertLiveSuggestions(
         suggestionsRef.current,
         response.suggestions,
         currentApprovedIds,
@@ -583,10 +606,12 @@ export function useGCCLiveInsights({
       lastAnalyzedRevisionRef.current = 0;
       lastAnalyzedTextLengthRef.current = 0;
       lastObservedTranscriptRef.current = "";
+      lastObservedFinalRevisionRef.current = 0;
       lastRequestedTranscriptRef.current = "";
       lastAcceptedTranscriptRef.current = "";
       lastRequestedAtRef.current = 0;
       lastSuccessfulRequestAtRef.current = 0;
+      lastAnalyzedWasProvisionalRef.current = false;
     } else if (localeChanged) {
       clearScheduledRequests();
       abortCurrentRequest();
@@ -598,10 +623,12 @@ export function useGCCLiveInsights({
       lastAnalyzedRevisionRef.current = 0;
       lastAnalyzedTextLengthRef.current = 0;
       lastObservedTranscriptRef.current = "";
+      lastObservedFinalRevisionRef.current = 0;
       lastRequestedTranscriptRef.current = "";
       lastAcceptedTranscriptRef.current = "";
       lastRequestedAtRef.current = 0;
       lastSuccessfulRequestAtRef.current = 0;
+      lastAnalyzedWasProvisionalRef.current = false;
     }
 
     const canRequest = Boolean(sessionId && isRecording && !isPaused && !isFinalizing && requestTranscript);
@@ -618,15 +645,20 @@ export function useGCCLiveInsights({
       return;
     }
 
-    if (requestTranscript === lastObservedTranscriptRef.current) return;
+    const replacesProvisional =
+      lastAnalyzedWasProvisionalRef.current
+      && !stableInterimTranscript
+      && transcriptRevision > lastObservedFinalRevisionRef.current;
+    if (requestTranscript === lastObservedTranscriptRef.current && !replacesProvisional) return;
     lastObservedTranscriptRef.current = requestTranscript;
+    lastObservedFinalRevisionRef.current = transcriptRevision;
     analysisRevisionRef.current = Math.max(
       analysisRevisionRef.current + 1,
       transcriptRevision,
     );
 
     const changedCharacters = countChangedCharacters(lastRequestedTranscriptRef.current, requestTranscript);
-    if (changedCharacters < minimumChangedCharacters) {
+    if (!replacesProvisional && changedCharacters < minimumChangedCharacters) {
       clearScheduledRequests();
       return;
     }
@@ -642,6 +674,15 @@ export function useGCCLiveInsights({
       void runRequest();
     }, requestDebounceMs);
 
+    if (forceTimerRef.current === null) {
+      const pendingSince = pendingChangeStartedAtRef.current ?? now;
+      const forceDelay = Math.max(0, pendingSince + maximumWaitMs - now);
+      forceTimerRef.current = window.setTimeout(() => {
+        forceTimerRef.current = null;
+        void runRequest();
+      }, forceDelay);
+    }
+
   }, [
     abortCurrentRequest,
     clearDebounceTimer,
@@ -653,6 +694,7 @@ export function useGCCLiveInsights({
     requestTranscript,
     runRequest,
     sessionId,
+    stableInterimTranscript,
     transcriptRevision,
   ]);
 
@@ -736,7 +778,7 @@ export function useGCCLiveInsights({
   const isCurrentSession = state.sessionId === sessionId && state.locale === locale;
   const suggestions = useMemo(
     () =>
-      withExclusionStatuses(
+      withLiveSuggestionStatuses(
         isCurrentSession ? state.suggestions : [],
         externalApprovedIds,
         externalIgnoredIds,
@@ -744,7 +786,7 @@ export function useGCCLiveInsights({
     [externalApprovedIds, externalIgnoredIds, isCurrentSession, state.suggestions],
   );
   const activeSuggestions = useMemo(
-    () => suggestions.filter((suggestion) => suggestion.status === "active"),
+    () => activeLiveSuggestions(suggestions),
     [suggestions],
   );
 

@@ -1,31 +1,11 @@
 import type {
   GCCLiveInsightsPatient,
-  GCCLiveInsightsResponse,
-  GCCLiveClaimImpact,
   GCCLiveSuggestion,
-  GCCLiveSuggestionCategory,
-  GCCLiveSuggestionPriority,
-  GCCLiveSuggestionStatus,
   GCCLiveTranscriptSegment,
 } from "@/types/gcc-live-insights";
 import type { GCCLocale } from "@/i18n/types";
 import type { SBSMatch } from "@/types/sbs-v3";
-
-const suggestionCategories = new Set<GCCLiveSuggestionCategory>([
-  "protocol_question",
-  "clinical_prompt",
-  "documentation",
-  "billing",
-  "compliance",
-  "safety",
-]);
-
-const suggestionPriorities = new Set<GCCLiveSuggestionPriority>(["low", "medium", "high"]);
-const suggestionStatuses = new Set<GCCLiveSuggestionStatus>(["active", "approved", "ignored", "resolved"]);
-const claimImpacts = new Set<GCCLiveClaimImpact>(["none", "warning", "blocking"]);
-const nonAlphaNumericPattern = new RegExp("[^\\p{L}\\p{N}]+", "gu");
-
-type JsonRecord = Record<string, unknown>;
+import { getRawLiveSuggestionCount, mapLiveInsightsResponse } from "@/lib/api/map-live-insights-response";
 
 export type GCCLiveInsightsRequestInput = {
   locale: GCCLocale;
@@ -41,179 +21,6 @@ export type GCCLiveInsightsRequestInput = {
   sbsMatches: readonly SBSMatch[];
   signal: AbortSignal;
 };
-
-function isRecord(value: unknown): value is JsonRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function requireRecord(value: unknown, field: string): JsonRecord {
-  if (!isRecord(value)) {
-    throw new Error(`Live insights returned an invalid ${field}.`);
-  }
-  return value;
-}
-
-function readString(record: JsonRecord, camelKey: string, snakeKey = camelKey) {
-  const value = record[camelKey] ?? record[snakeKey];
-  return typeof value === "string" ? value.trim() : "";
-}
-
-function requireString(record: JsonRecord, camelKey: string, snakeKey = camelKey) {
-  const value = readString(record, camelKey, snakeKey);
-  if (!value) {
-    throw new Error("Live insights returned an incomplete suggestion.");
-  }
-  return value;
-}
-
-function requireNonNegativeInteger(value: unknown, field: string) {
-  if (typeof value !== "number" || !Number.isInteger(value) || value < 0) {
-    throw new Error(`Live insights returned an invalid ${field}.`);
-  }
-  return value;
-}
-
-function normalizeFingerprintPart(value: string) {
-  return value
-    .normalize("NFKC")
-    .toLowerCase()
-    .replace(nonAlphaNumericPattern, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-export function createGCCSuggestionFingerprint(
-  category: GCCLiveSuggestionCategory,
-  title: string,
-  evidence: string,
-) {
-  return [category, normalizeFingerprintPart(title), normalizeFingerprintPart(evidence)].join("|");
-}
-
-function parseSuggestion(value: unknown, receivedAt: string): GCCLiveSuggestion | null {
-  if (!isRecord(value)) return null;
-  const suggestion = value;
-  const category = readString(suggestion, "category") as GCCLiveSuggestionCategory;
-  if (!suggestionCategories.has(category)) {
-    return null;
-  }
-
-  const title = requireString(suggestion, "title");
-  const message = readString(suggestion, "message") || title;
-  const evidence = requireString(suggestion, "evidence");
-  const actionLabel = readString(suggestion, "actionLabel", "action_label") || title;
-  const priority = readString(suggestion, "priority") as GCCLiveSuggestionPriority;
-  if (!suggestionPriorities.has(priority)) {
-    return null;
-  }
-
-  const rawStatus = readString(suggestion, "status");
-  const status = (rawStatus || "active") as GCCLiveSuggestionStatus;
-  if (!suggestionStatuses.has(status)) {
-    return null;
-  }
-  const rawClaimImpact = readString(suggestion, "claimImpact", "claim_impact");
-  const claimImpact = (rawClaimImpact || "none") as GCCLiveClaimImpact;
-  if (!claimImpacts.has(claimImpact)) {
-    return null;
-  }
-
-  const fallbackFingerprint = createGCCSuggestionFingerprint(category, title, evidence);
-  const suppliedId = readString(suggestion, "id");
-  const fingerprint = readString(suggestion, "fingerprint") || suppliedId || fallbackFingerprint;
-  const id = suppliedId || fingerprint;
-  const rawConfidence = suggestion.confidence;
-  const confidence =
-    rawConfidence === null || rawConfidence === undefined
-      ? null
-      : typeof rawConfidence === "number" && Number.isFinite(rawConfidence) && rawConfidence >= 0 && rawConfidence <= 1
-        ? rawConfidence
-        : null;
-
-  return {
-    id,
-    fingerprint,
-    category,
-    title,
-    message,
-    evidence,
-    priority,
-    confidence,
-    actionLabel,
-    status,
-    claimImpact,
-    createdAt: readString(suggestion, "createdAt", "created_at") || receivedAt,
-    updatedAt: readString(suggestion, "updatedAt", "updated_at") || receivedAt,
-  };
-}
-
-export function parseGCCLiveInsightsResponse(
-  value: unknown,
-  expectedLanguage?: GCCLocale,
-): GCCLiveInsightsResponse {
-  const response = requireRecord(value, "response");
-  const language = readString(response, "language") as GCCLocale;
-  const locale = readString(response, "locale") as "en-US" | "ar-SA";
-  if (
-    expectedLanguage &&
-    (language !== expectedLanguage || locale !== (expectedLanguage === "ar" ? "ar-SA" : "en-US"))
-  ) {
-    throw new Error("Live insights returned a mismatched language.");
-  }
-  const sessionId = requireString(response, "sessionId", "session_id");
-  const transcriptRevision = requireNonNegativeInteger(
-    response.transcriptRevision ?? response.transcript_revision,
-    "transcript revision",
-  );
-  const rawSuggestions = response.suggestions;
-  if (!Array.isArray(rawSuggestions) || rawSuggestions.length > 5) {
-    throw new Error("Live insights returned an invalid suggestions list.");
-  }
-
-  const receivedAt = new Date().toISOString();
-  const suggestionsByFingerprint = new Map<string, GCCLiveSuggestion>();
-  rawSuggestions.forEach((suggestion) => {
-    try {
-      const parsed = parseSuggestion(suggestion, receivedAt);
-      if (parsed) suggestionsByFingerprint.set(parsed.fingerprint, parsed);
-    } catch {
-      // Keep valid suggestions when one optional or malformed item is incomplete.
-    }
-  });
-
-  const readinessValue = response.claimReadiness ?? response.claim_readiness;
-  let claimReadiness = null;
-  if (isRecord(readinessValue)) {
-    const rawBlockingIssues = readinessValue.blockingIssues ?? readinessValue.blocking_issues;
-    const rawWarnings = readinessValue.warnings;
-    const summary = readString(readinessValue, "summary");
-    if (
-      typeof rawBlockingIssues === "number" && Number.isInteger(rawBlockingIssues) && rawBlockingIssues >= 0 &&
-      typeof rawWarnings === "number" && Number.isInteger(rawWarnings) && rawWarnings >= 0 &&
-      summary
-    ) {
-      claimReadiness = { blockingIssues: rawBlockingIssues, warnings: rawWarnings, summary };
-    }
-  }
-  const rawRetryAfter = response.retryAfterSeconds ?? response.retry_after_seconds;
-  const retryAfterSeconds =
-    typeof rawRetryAfter === "number" && Number.isFinite(rawRetryAfter) && rawRetryAfter > 0
-      ? Math.ceil(rawRetryAfter)
-      : null;
-
-  return {
-    language: language || expectedLanguage || "en",
-    locale: locale || (expectedLanguage === "ar" ? "ar-SA" : "en-US"),
-    sessionId,
-    transcriptRevision,
-    suggestions: [...suggestionsByFingerprint.values()],
-    claimReadiness,
-    fallbackReason: readString(response, "fallbackReason", "fallback_reason") || null,
-    retryAfterSeconds,
-    provider: readString(response, "provider") || "groq",
-    model: readString(response, "model"),
-  };
-}
 
 function serializeSuggestion(suggestion: GCCLiveSuggestion) {
   return {
@@ -258,6 +65,7 @@ export async function requestGCCLiveInsights({
     console.debug("[GCC live insights] request started", {
       hasSessionId: Boolean(sessionId),
       transcriptRevision,
+      transcriptLength: recentTranscript.length,
       segmentCount: recentSegments.length,
       sbsMatchCount: sbsMatches.length,
     });
@@ -316,5 +124,15 @@ export async function requestGCCLiveInsights({
     console.debug("[GCC live insights] response received", { status: response.status });
   }
 
-  return parseGCCLiveInsightsResponse(await response.json(), locale);
+  const raw = await response.json();
+  const mapped = mapLiveInsightsResponse(raw, locale);
+  if (process.env.NODE_ENV === "development") {
+    console.debug("[GCC live insights] response mapped", {
+      responseStatus: response.status,
+      rawSuggestionCount: getRawLiveSuggestionCount(raw),
+      mappedSuggestionCount: mapped.suggestions.length,
+      fallbackReason: mapped.fallbackReason,
+    });
+  }
+  return mapped;
 }

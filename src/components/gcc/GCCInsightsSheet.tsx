@@ -6,7 +6,7 @@ import { useGCCLocale } from "@/hooks/useGCCLocale";
 import type { GCCLiveInsightsStatus, GCCLiveSuggestion } from "@/types/gcc-live-insights";
 
 type Props = {
-  suggestions: GCCLiveSuggestion[];
+  activeSuggestions: GCCLiveSuggestion[];
   status: GCCLiveInsightsStatus;
   lastUpdatedAt: number | null;
   hasTranscript: boolean;
@@ -14,23 +14,44 @@ type Props = {
   onIgnore: (fingerprint: string) => void;
 };
 
-export default function GCCInsightsSheet({ suggestions, status, lastUpdatedAt, hasTranscript, onApprove, onIgnore }: Props) {
+export default function GCCInsightsSheet({ activeSuggestions, status, lastUpdatedAt, hasTranscript, onApprove, onIgnore }: Props) {
   const { t, formatNumber } = useGCCLocale();
   const timersRef = useRef<number[]>([]);
   const [exitStates, setExitStates] = useState<Record<string, GCCDemoSuggestionExit>>({});
-  const activeSuggestions = useMemo(
-    () => suggestions.filter((suggestion) => suggestion.status === "active" || exitStates[suggestion.fingerprint] === "approved"),
-    [exitStates, suggestions],
+  const [exitingSuggestions, setExitingSuggestions] = useState<Record<string, GCCLiveSuggestion>>({});
+  const visibleSuggestions = useMemo(
+    () => [
+      ...activeSuggestions,
+      ...Object.values(exitingSuggestions).filter(
+        (suggestion) => !activeSuggestions.some((active) => active.fingerprint === suggestion.fingerprint),
+      ),
+    ],
+    [activeSuggestions, exitingSuggestions],
   );
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    console.debug("[GCC live insights] cards rendered", {
+      activeSuggestionCount: activeSuggestions.length,
+      renderedSuggestionCount: visibleSuggestions.length,
+    });
+  }, [activeSuggestions.length, visibleSuggestions.length]);
 
   useEffect(() => () => timersRef.current.forEach((timer) => window.clearTimeout(timer)), []);
 
   const dismissSuggestion = (fingerprint: string, nextState: Exclude<GCCDemoSuggestionExit, null>) => {
+    const exiting = activeSuggestions.find((suggestion) => suggestion.fingerprint === fingerprint);
+    if (exiting) setExitingSuggestions((current) => ({ ...current, [fingerprint]: exiting }));
     setExitStates((current) => ({ ...current, [fingerprint]: nextState }));
     if (nextState === "approved") onApprove(fingerprint);
     else onIgnore(fingerprint);
     const timer = window.setTimeout(() => {
       setExitStates((current) => {
+        const next = { ...current };
+        delete next[fingerprint];
+        return next;
+      });
+      setExitingSuggestions((current) => {
         const next = { ...current };
         delete next[fingerprint];
         return next;
@@ -46,6 +67,8 @@ export default function GCCInsightsSheet({ suggestions, status, lastUpdatedAt, h
       : t("session.insights.headline.processing");
   const statusText = status === "analyzing"
     ? t("session.insights.status.analyzing")
+    : status === "retrying"
+      ? t("session.insights.status.retrying")
     : status === "paused"
       ? t("session.insights.status.paused")
       : status === "unavailable"
@@ -62,7 +85,7 @@ export default function GCCInsightsSheet({ suggestions, status, lastUpdatedAt, h
           <p role="status" className="mt-1 text-[11px] font-medium text-indigo-500">{statusText}</p>
         </div>
         <p className="shrink-0 text-[16px] text-[#606067] sm:text-[18px]" aria-live="polite">
-          <strong className="me-2 font-semibold text-[#17171b]">{formatNumber(activeSuggestions.length)}</strong>
+          <strong className="me-2 font-semibold text-[#17171b]">{formatNumber(visibleSuggestions.length)}</strong>
           {t("session.insights.suggestionCount.other", { count: "" }).trim()}
         </p>
       </header>
@@ -75,9 +98,9 @@ export default function GCCInsightsSheet({ suggestions, status, lastUpdatedAt, h
           <span className="absolute left-1/2 top-5 z-10 h-2 w-[72px] -translate-x-1/2 rounded-full bg-[#d6d6d9] shadow-inner" aria-hidden="true" />
 
           <div className="gcc-insights-scroll relative h-[clamp(470px,62vh,690px)] overflow-y-auto overscroll-contain px-4 pb-10 pt-16 sm:px-12 sm:pb-12 sm:pt-20" aria-live="polite">
-            {activeSuggestions.length > 0 ? (
+            {visibleSuggestions.length > 0 ? (
               <div className="mx-auto grid max-w-[570px] gap-7">
-                {activeSuggestions.map((suggestion) => (
+                {visibleSuggestions.map((suggestion) => (
                   <div key={suggestion.fingerprint} className="relative ps-7 sm:ps-14">
                     <span className="pointer-events-none absolute start-0 top-0 h-11 w-7 rounded-es-[20px] border-b-2 border-s-2 border-dashed border-[#91b7ff] sm:w-10" aria-hidden="true" />
                     <GCCSuggestionCard suggestion={suggestion} exitState={exitStates[suggestion.fingerprint] ?? null} onApprove={(id) => dismissSuggestion(id, "approved")} onIgnore={(id) => dismissSuggestion(id, "ignored")} />

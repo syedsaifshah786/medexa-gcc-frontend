@@ -80,6 +80,8 @@ export default function GCCClaimQualityDropdown({ readiness, insightStatus, sess
               : "session.claimQuality.session.inactive");
   const insightLabel = t(insightStatus === "analyzing"
     ? "session.claimQuality.insights.analyzing"
+    : insightStatus === "retrying"
+      ? "session.claimQuality.insights.retrying"
     : insightStatus === "paused"
       ? "session.claimQuality.insights.paused"
       : insightStatus === "unavailable"

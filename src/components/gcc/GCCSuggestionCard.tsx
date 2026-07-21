@@ -17,6 +17,11 @@ type Props = {
 
 function categoryKey(category: GCCLiveSuggestionCategory) {
   const keys: Record<GCCLiveSuggestionCategory, string> = {
+    clinical: "session.suggestion.category.clinicalPrompt",
+    protocol: "session.suggestion.category.protocolQuestion",
+    protocol_ask: "session.suggestion.category.protocolQuestion",
+    detected: "session.suggestion.category.documentation",
+    warning: "session.suggestion.category.safety",
     protocol_question: "session.suggestion.category.protocolQuestion",
     clinical_prompt: "session.suggestion.category.clinicalPrompt",
     documentation: "session.suggestion.category.documentation",
@@ -29,12 +34,13 @@ function categoryKey(category: GCCLiveSuggestionCategory) {
 
 export default function GCCSuggestionCard({ suggestion, exitState, onApprove, onIgnore }: Props) {
   const { t } = useGCCLocale();
-  const isProtocol = suggestion.category === "protocol_question";
+  const isProtocol = ["protocol", "protocol_ask", "protocol_question"].includes(suggestion.category);
   const approved = exitState === "approved" || suggestion.status === "approved";
   const label = t(categoryKey(suggestion.category));
 
   return (
     <article
+      data-live-suggestion-card=""
       data-demo-exit={exitState || undefined}
       className={isProtocol
         ? "gcc-demo-suggestion rounded-[22px] bg-gradient-to-br from-[#5e6cf0] via-[#50c8cf] to-[#78ee31] p-[2px] shadow-[0_10px_24px_rgba(48,105,151,0.14)]"
@@ -56,9 +62,11 @@ export default function GCCSuggestionCard({ suggestion, exitState, onApprove, on
 
         <h3 dir="auto" className="mt-3 text-[15px] font-bold text-[#171b32]">{suggestion.title}</h3>
         <p dir="auto" className="mt-1.5 text-[15px] leading-[1.5] text-[#202128]">{suggestion.message}</p>
-        <blockquote dir="auto" className="mt-3 rounded-xl bg-indigo-50/70 px-3 py-2 text-[12px] leading-5 text-indigo-800">
-          {t("session.suggestion.evidenceQuote", { evidence: suggestion.evidence })}
-        </blockquote>
+        {suggestion.evidence && (
+          <blockquote dir="auto" className="mt-3 rounded-xl bg-indigo-50/70 px-3 py-2 text-[12px] leading-5 text-indigo-800">
+            {t("session.suggestion.evidenceQuote", { evidence: suggestion.evidence })}
+          </blockquote>
+        )}
 
         <SlideAction label={t("session.suggestion.slideApprove")} completedLabel={t("session.suggestion.approved")} completed={approved} disabled={Boolean(exitState) && !approved} onComplete={() => onApprove(suggestion.fingerprint)} className="mt-4 w-full max-w-[322px]" />
 
