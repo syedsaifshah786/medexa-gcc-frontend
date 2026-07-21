@@ -123,6 +123,35 @@ export type GCCFinalizeSessionResponse = {
   locale?: string;
 };
 
+export type GCCFinalizeErrorKind =
+  | "rate_limit"
+  | "validation"
+  | "authentication"
+  | "backend_unavailable"
+  | "invalid_review_bundle";
+
+export class GCCFinalizeError extends Error {
+  readonly kind: GCCFinalizeErrorKind;
+  readonly errorCode: string;
+  readonly retryable: boolean;
+  readonly retryAfterSeconds: number | null;
+
+  constructor(options: {
+    kind: GCCFinalizeErrorKind;
+    errorCode: string;
+    message: string;
+    retryable: boolean;
+    retryAfterSeconds?: number | null;
+  }) {
+    super(options.message);
+    this.name = "GCCFinalizeError";
+    this.kind = options.kind;
+    this.errorCode = options.errorCode;
+    this.retryable = options.retryable;
+    this.retryAfterSeconds = options.retryAfterSeconds ?? null;
+  }
+}
+
 type FinalizePayload = {
   sessionId: string;
   transcript: string;
@@ -325,10 +354,16 @@ function validateFinalizeResponse(
   expectedLanguage: GCCLocale,
 ): GCCFinalizeSessionResponse {
   if (!value || typeof value !== "object") {
-    throw new Error("Invalid finalize-session response.");
+    throw new GCCFinalizeError({
+      kind: "invalid_review_bundle",
+      errorCode: "invalid_review_bundle",
+      message: "The backend returned an invalid review bundle.",
+      retryable: false,
+    });
   }
 
   const response = value as Partial<GCCFinalizeSessionResponse> & {
+    ok?: boolean;
     soap_note?: GCCSoapNote;
     billing_intelligence?: GCCBillingIntelligence;
     patient_summary?: GCCPatientSummary;
@@ -343,18 +378,21 @@ function validateFinalizeResponse(
   const expectedLocale = expectedLanguage === "ar" ? "ar-SA" : "en-US";
 
   if (
+    response.ok === false ||
     response.saved_to_store !== true ||
     response.status !== "completed" ||
-    response.llm_used !== true ||
-    response.provider !== "groq" ||
-    !response.model ||
-    response.language !== expectedLanguage ||
-    response.locale !== expectedLocale ||
+    (response.language !== undefined && response.language !== expectedLanguage) ||
+    (response.locale !== undefined && response.locale !== expectedLocale) ||
     !reviewBundle?.soap_note ||
     !reviewBundle.billing_intelligence ||
     !reviewBundle.patient_summary
   ) {
-    throw new Error("Review bundle was not saved by finalize-session.");
+    throw new GCCFinalizeError({
+      kind: "invalid_review_bundle",
+      errorCode: "invalid_review_bundle",
+      message: "The backend returned an invalid review bundle.",
+      retryable: false,
+    });
   }
 
   return {
@@ -368,13 +406,45 @@ function validateFinalizeResponse(
       billing_intelligence: reviewBundle.billing_intelligence,
       patient_summary: reviewBundle.patient_summary,
     },
-    llm_used: response.llm_used ?? false,
+    llm_used: response.llm_used ?? true,
     fallback_reason: response.fallback_reason ?? response.llm_fallback_reason ?? null,
-    provider: "groq",
-    model: response.model,
+    provider: response.provider ?? "groq",
+    model: response.model ?? "configured",
     language: response.language,
     locale: response.locale,
   };
+}
+
+function finalizeErrorFromResponse(status: number, value: unknown) {
+  const body = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const detail = body.detail && typeof body.detail === "object" ? body.detail as Record<string, unknown> : {};
+  const source = { ...detail, ...body };
+  const errorCode = typeof source.error_code === "string" ? source.error_code : `http_${status}`;
+  const backendMessage = typeof source.message === "string"
+    ? source.message.trim()
+    : typeof body.detail === "string"
+      ? body.detail.trim()
+      : "Review generation could not be completed.";
+  const rawRetryAfter = source.retry_after_seconds;
+  const retryAfterSeconds = typeof rawRetryAfter === "number" && rawRetryAfter > 0
+    ? Math.ceil(rawRetryAfter)
+    : null;
+  const retryable = source.retryable === true || status === 429 || status >= 500;
+  const kind: GCCFinalizeErrorKind =
+    status === 429 || errorCode === "groq_rate_limited"
+      ? "rate_limit"
+      : status === 401 || status === 403 || errorCode.includes("auth") || errorCode.includes("permission")
+        ? "authentication"
+        : status === 400 || status === 422 || errorCode.includes("validation")
+          ? "validation"
+          : "backend_unavailable";
+  return new GCCFinalizeError({
+    kind,
+    errorCode,
+    message: backendMessage,
+    retryable,
+    retryAfterSeconds,
+  });
 }
 
 export function saveReviewBundleLocally(bundle: GCCReviewBundle, locale = bundle.locale ?? "en") {
@@ -445,11 +515,13 @@ export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCF
   const timeoutId = window.setTimeout(() => controller.abort(), 55000);
 
   try {
-    const response = await fetch(`${apiBaseUrl}/sessions/${encodeURIComponent(payload.sessionId)}/finalize-session`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      signal: controller.signal,
-      body: JSON.stringify({
+    let response: Response;
+    try {
+      response = await fetch(`${apiBaseUrl}/sessions/${encodeURIComponent(payload.sessionId)}/finalize-session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
         session_id: payload.sessionId,
         market: "gcc",
         language: locale,
@@ -478,19 +550,39 @@ export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCF
           detected_at: match.detectedAt,
         })),
         generate_review_bundle: true,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Finalize session failed with status ${response.status}.`);
+        }),
+      });
+    } catch (error) {
+      throw new GCCFinalizeError({
+        kind: "backend_unavailable",
+        errorCode: error instanceof DOMException && error.name === "AbortError" ? "request_timeout" : "network_error",
+        message: "The review service is temporarily unavailable.",
+        retryable: true,
+        retryAfterSeconds: 5,
+      });
     }
 
-    const validated = validateFinalizeResponse(await response.json(), locale);
+    const responseValue = await response.json().catch(() => null);
+    if (!response.ok) {
+      throw finalizeErrorFromResponse(response.status, responseValue);
+    }
+
+    const validated = validateFinalizeResponse(responseValue, locale);
     if (validated.session_id !== payload.sessionId || !normalizeTranscript(validated.transcript)) {
-      throw new Error("Finalize session returned a mismatched or empty transcript.");
+      throw new GCCFinalizeError({
+        kind: "invalid_review_bundle",
+        errorCode: "mismatched_review_bundle",
+        message: "The backend returned a mismatched review bundle.",
+        retryable: false,
+      });
     }
     if (!validated.review_bundle.billing_intelligence || !validated.review_bundle.patient_summary) {
-      throw new Error("Finalize session did not return a complete review bundle.");
+      throw new GCCFinalizeError({
+        kind: "invalid_review_bundle",
+        errorCode: "incomplete_review_bundle",
+        message: "The backend returned an incomplete review bundle.",
+        retryable: false,
+      });
     }
 
     return {

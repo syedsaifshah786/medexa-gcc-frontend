@@ -42,8 +42,11 @@ export type GCCLiveInsightsResponse = {
   sessionId: string;
   transcriptRevision: number;
   suggestions: GCCLiveSuggestion[];
-  claimReadiness: GCCClaimReadiness;
+  claimReadiness: GCCClaimReadiness | null;
   fallbackReason: string | null;
+  retryAfterSeconds: number | null;
+  provider: string;
+  model: string;
 };
 
 export type GCCLiveInsightsStatus = "idle" | "analyzing" | "updated" | "paused" | "unavailable";

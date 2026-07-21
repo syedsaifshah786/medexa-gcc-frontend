@@ -11,7 +11,7 @@ import {
   normalizeVoiceCommandText,
   removeVoiceCommands,
 } from "@/lib/gcc/transcript-utils";
-import { buildReviewBundleFromFinalizeResponse, finalizeGCCSession, saveReviewBundleLocally, saveSoapLocally } from "@/lib/gcc/session-api";
+import { buildReviewBundleFromFinalizeResponse, finalizeGCCSession, GCCFinalizeError, saveReviewBundleLocally, saveSoapLocally } from "@/lib/gcc/session-api";
 import type { SBSMatch } from "@/types/sbs-v3";
 
 export type SessionStatus = "idle" | "command-listening" | "starting" | "recording" | "paused" | "stopping" | "stopped" | "error";
@@ -150,7 +150,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   const accumulatedMsRef = useRef(0);
   const pausedAtRef = useRef<number | null>(null);
   const timerIntervalRef = useRef<number | null>(null);
-  const finalizingRef = useRef(false);
+  const isFinalizingRef = useRef(false);
+  const finalizeRetryAfterUntilRef = useRef(0);
   const stoppedRef = useRef(false);
   const startNavigationInProgressRef = useRef(false);
   const mountedRef = useRef(false);
@@ -184,7 +185,9 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   const [finalizationErrorKey, setFinalizationError] = useState<string | null>(null);
   const errorMessage = errorMessageKey ? t(errorMessageKey) : null;
   const finalizationMessage = finalizationMessageKey ? t(finalizationMessageKey) : null;
-  const finalizationError = finalizationErrorKey ? t(finalizationErrorKey) : null;
+  const finalizationError = finalizationErrorKey
+    ? finalizationErrorKey.startsWith("session.") ? t(finalizationErrorKey) : finalizationErrorKey
+    : null;
 
   const setSafeStatus = useCallback((nextStatus: SessionStatus) => {
     statusRef.current = nextStatus;
@@ -221,6 +224,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
         sessionId: payload.sessionId,
         transcript: payload.transcript,
         transcriptSegments: transcriptSegmentsRef.current,
+        patient: sessionPatientRef.current,
+        sbsMatches: sbsMatchesRef.current,
         elapsedMs: payload.elapsedMs,
         status: payload.status,
         savedAt: new Date().toISOString(),
@@ -424,7 +429,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       shouldRecognitionRunRef.current &&
       modeBeforeSwitch !== "off" &&
       permissionStatusRef.current !== "denied" &&
-      !finalizingRef.current &&
+      !isFinalizingRef.current &&
       !stoppedRef.current;
 
     clearRestartTimeout();
@@ -439,7 +444,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       if (
         shouldRestart &&
         modeRef.current === modeBeforeSwitch &&
-        !finalizingRef.current &&
+        !isFinalizingRef.current &&
         !stoppedRef.current
       ) {
         startRecognition(modeBeforeSwitch);
@@ -524,10 +529,13 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   }, [appendFinalTranscript, clearRestartTimeout, waitForRecognitionEnd]);
 
   const finalizeAndNavigateToSoap = useCallback(async () => {
-    if (finalizingRef.current) return;
+    if (isFinalizingRef.current) return;
     if (stoppedRef.current) return;
-    finalizingRef.current = true;
+    isFinalizingRef.current = true;
     stoppedRef.current = true;
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("medexa:gcc-finalizing"));
+    }
     setSafeStatus("stopping");
     setFinalizationMessage("session.finalize.inProgress");
     setFinalizationError(null);
@@ -586,12 +594,18 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       setSafeStatus("stopped");
       persistSession({ status: "stopped", elapsedMs: frozenElapsed });
       setFinalizationMessage(null);
+      finalizeRetryAfterUntilRef.current = 0;
       router.replace(`/soap-notes?sessionId=${encodeURIComponent(id)}`);
     } catch (error) {
       const messageKey =
         error instanceof Error && error.message === "NO_TRANSCRIPT"
           ? "session.finalize.noTranscript"
+          : error instanceof GCCFinalizeError
+            ? error.message
           : "session.finalize.failedSaved";
+      if (error instanceof GCCFinalizeError && error.retryable) {
+        finalizeRetryAfterUntilRef.current = Date.now() + (error.retryAfterSeconds ?? 0) * 1_000;
+      }
       const failedElapsed = calculateElapsed();
       const transcript = buildFinalTranscript({
         finalTranscript: finalTranscriptRef.current,
@@ -608,7 +622,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
       setFinalizationMessage(null);
       setFinalizationError(messageKey);
       persistSession({ status: "stopped", elapsedMs: failedElapsed });
-      finalizingRef.current = false;
+      isFinalizingRef.current = false;
       stoppedRef.current = false;
     }
   }, [
@@ -673,7 +687,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     accumulatedMsRef.current = 0;
     sessionStartedAtRef.current = null;
     pausedAtRef.current = null;
-    finalizingRef.current = false;
+    isFinalizingRef.current = false;
+    finalizeRetryAfterUntilRef.current = 0;
     stoppedRef.current = false;
     startNavigationInProgressRef.current = false;
     setFinalizationMessage(null);
@@ -700,7 +715,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     }
 
     const id = options?.sessionId ?? generateSessionId();
-    finalizingRef.current = false;
+    isFinalizingRef.current = false;
+    finalizeRetryAfterUntilRef.current = 0;
     stoppedRef.current = false;
     sessionIdRef.current = id;
     sessionInputModeRef.current = inputMode;
@@ -1001,8 +1017,12 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
   }, [pathname, safeStopRecognition]);
 
   const retryFinalize = useCallback(async () => {
-    finalizingRef.current = false;
+    isFinalizingRef.current = false;
     stoppedRef.current = false;
+    const delayMs = Math.max(0, finalizeRetryAfterUntilRef.current - Date.now());
+    if (delayMs > 0) {
+      await new Promise<void>((resolve) => window.setTimeout(resolve, delayMs));
+    }
     await finalizeAndNavigateToSoap();
   }, [finalizeAndNavigateToSoap]);
 

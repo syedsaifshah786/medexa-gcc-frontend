@@ -90,31 +90,32 @@ export function createGCCSuggestionFingerprint(
   return [category, normalizeFingerprintPart(title), normalizeFingerprintPart(evidence)].join("|");
 }
 
-function parseSuggestion(value: unknown, receivedAt: string): GCCLiveSuggestion {
-  const suggestion = requireRecord(value, "suggestion");
+function parseSuggestion(value: unknown, receivedAt: string): GCCLiveSuggestion | null {
+  if (!isRecord(value)) return null;
+  const suggestion = value;
   const category = readString(suggestion, "category") as GCCLiveSuggestionCategory;
   if (!suggestionCategories.has(category)) {
-    throw new Error("Live insights returned an invalid suggestion category.");
+    return null;
   }
 
   const title = requireString(suggestion, "title");
   const message = readString(suggestion, "message") || title;
   const evidence = requireString(suggestion, "evidence");
-  const actionLabel = requireString(suggestion, "actionLabel", "action_label");
+  const actionLabel = readString(suggestion, "actionLabel", "action_label") || title;
   const priority = readString(suggestion, "priority") as GCCLiveSuggestionPriority;
   if (!suggestionPriorities.has(priority)) {
-    throw new Error("Live insights returned an invalid suggestion priority.");
+    return null;
   }
 
   const rawStatus = readString(suggestion, "status");
   const status = (rawStatus || "active") as GCCLiveSuggestionStatus;
   if (!suggestionStatuses.has(status)) {
-    throw new Error("Live insights returned an invalid suggestion status.");
+    return null;
   }
   const rawClaimImpact = readString(suggestion, "claimImpact", "claim_impact");
   const claimImpact = (rawClaimImpact || "none") as GCCLiveClaimImpact;
   if (!claimImpacts.has(claimImpact)) {
-    throw new Error("Live insights returned an invalid claim impact.");
+    return null;
   }
 
   const fallbackFingerprint = createGCCSuggestionFingerprint(category, title, evidence);
@@ -172,17 +173,33 @@ export function parseGCCLiveInsightsResponse(
   const receivedAt = new Date().toISOString();
   const suggestionsByFingerprint = new Map<string, GCCLiveSuggestion>();
   rawSuggestions.forEach((suggestion) => {
-    const parsed = parseSuggestion(suggestion, receivedAt);
-    suggestionsByFingerprint.set(parsed.fingerprint, parsed);
+    try {
+      const parsed = parseSuggestion(suggestion, receivedAt);
+      if (parsed) suggestionsByFingerprint.set(parsed.fingerprint, parsed);
+    } catch {
+      // Keep valid suggestions when one optional or malformed item is incomplete.
+    }
   });
 
-  const rawReadiness = requireRecord(response.claimReadiness ?? response.claim_readiness, "claim readiness");
-  const blockingIssues = requireNonNegativeInteger(
-    rawReadiness.blockingIssues ?? rawReadiness.blocking_issues,
-    "claim blocking issue count",
-  );
-  const warnings = requireNonNegativeInteger(rawReadiness.warnings, "claim warning count");
-  const summary = requireString(rawReadiness, "summary");
+  const readinessValue = response.claimReadiness ?? response.claim_readiness;
+  let claimReadiness = null;
+  if (isRecord(readinessValue)) {
+    const rawBlockingIssues = readinessValue.blockingIssues ?? readinessValue.blocking_issues;
+    const rawWarnings = readinessValue.warnings;
+    const summary = readString(readinessValue, "summary");
+    if (
+      typeof rawBlockingIssues === "number" && Number.isInteger(rawBlockingIssues) && rawBlockingIssues >= 0 &&
+      typeof rawWarnings === "number" && Number.isInteger(rawWarnings) && rawWarnings >= 0 &&
+      summary
+    ) {
+      claimReadiness = { blockingIssues: rawBlockingIssues, warnings: rawWarnings, summary };
+    }
+  }
+  const rawRetryAfter = response.retryAfterSeconds ?? response.retry_after_seconds;
+  const retryAfterSeconds =
+    typeof rawRetryAfter === "number" && Number.isFinite(rawRetryAfter) && rawRetryAfter > 0
+      ? Math.ceil(rawRetryAfter)
+      : null;
 
   return {
     language: language || expectedLanguage || "en",
@@ -190,12 +207,11 @@ export function parseGCCLiveInsightsResponse(
     sessionId,
     transcriptRevision,
     suggestions: [...suggestionsByFingerprint.values()],
-    claimReadiness: {
-      blockingIssues,
-      warnings,
-      summary,
-    },
+    claimReadiness,
     fallbackReason: readString(response, "fallbackReason", "fallback_reason") || null,
+    retryAfterSeconds,
+    provider: readString(response, "provider") || "groq",
+    model: readString(response, "model"),
   };
 }
 
