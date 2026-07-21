@@ -5,6 +5,7 @@ import { DoctorProvider } from "@/components/DoctorContext";
 import { translate } from "@/i18n";
 import type { GCCLocale } from "@/i18n/types";
 import { GCCLocaleProvider } from "@/providers/GCCLocaleProvider";
+import { GCCReviewProvider } from "@/providers/GCCReviewProvider";
 import { GCCVoiceSessionProvider } from "@/providers/GCCVoiceSessionProvider";
 import "./globals.css";
 
@@ -97,7 +98,9 @@ export default async function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: getLocaleBootstrapScript(locale) }} />
         <GCCLocaleProvider initialLocale={locale}>
           <DoctorProvider>
-            <GCCVoiceSessionProvider>{children}</GCCVoiceSessionProvider>
+            <GCCReviewProvider>
+              <GCCVoiceSessionProvider>{children}</GCCVoiceSessionProvider>
+            </GCCReviewProvider>
           </DoctorProvider>
         </GCCLocaleProvider>
       </body>

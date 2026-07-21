@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useGCCLocale } from "@/hooks/useGCCLocale";
+import { countMeaningfulSoapFields } from "@/lib/review/map-review-bundle-response";
+import { resolveReviewBundleForSession } from "@/lib/review/resolve-review-bundle";
+import { useGCCReviewContext } from "@/providers/GCCReviewProvider";
 import {
   fetchGCCReviewBundle,
   readReviewBundleFromCache,
@@ -50,6 +53,7 @@ function applyBundle(bundle: GCCReviewBundle | null) {
 export function useGCCReviewData(): GCCReviewData {
   const searchParams = useSearchParams();
   const { locale, t } = useGCCLocale();
+  const reviewContext = useGCCReviewContext();
   const sessionId = searchParams.get("sessionId");
   const [status, setStatus] = useState<ReviewDataStatus>("idle");
   const [bundle, setBundle] = useState<GCCReviewBundle | null>(null);
@@ -75,11 +79,15 @@ export function useGCCReviewData(): GCCReviewData {
       };
     }
 
-    const cachedBundle = readReviewBundleFromCache(sessionId, locale);
+    const cachedFromStorage = readReviewBundleFromCache(sessionId, locale);
+    const resolved = resolveReviewBundleForSession(sessionId, locale, reviewContext.bundle, cachedFromStorage);
+    const providerBundle = resolved.source === "provider" ? resolved.bundle : null;
+    const cachedBundle = resolved.bundle;
     queueMicrotask(() => {
       if (!isMounted) return;
       if (cachedBundle) {
         setBundle(cachedBundle);
+        if (!providerBundle) reviewContext.setReviewBundle(cachedBundle, "cache");
         setStatus("ready");
         setError(null);
       } else {
@@ -89,6 +97,19 @@ export function useGCCReviewData(): GCCReviewData {
       }
     });
 
+    if (cachedBundle) {
+      if (process.env.NODE_ENV === "development") {
+        console.debug("[GCC review] bundle loaded", {
+          sessionIdMatches: cachedBundle.sessionId === sessionId,
+          soapLoaderSource: resolved.source,
+          mappedSoapFieldCount: countMeaningfulSoapFields(cachedBundle.soapNote),
+        });
+      }
+      return () => {
+        isMounted = false;
+      };
+    }
+
     const loadBundle = async () => {
       try {
         const remoteBundle = await fetchGCCReviewBundle(sessionId, locale);
@@ -97,6 +118,7 @@ export function useGCCReviewData(): GCCReviewData {
         if (remoteBundle) {
           setBundle(remoteBundle);
           saveReviewBundleLocally(remoteBundle, locale);
+          reviewContext.setReviewBundle(remoteBundle, "backend");
           setStatus("ready");
           setError(null);
           return;
@@ -104,8 +126,8 @@ export function useGCCReviewData(): GCCReviewData {
 
         if (!cachedBundle) {
           setBundle(null);
-          setStatus("waiting-for-session");
-          setError(null);
+          setStatus("error");
+          setError(t("review.error.notFound"));
         }
       } catch {
         if (!isMounted) return;
@@ -118,7 +140,7 @@ export function useGCCReviewData(): GCCReviewData {
     return () => {
       isMounted = false;
     };
-  }, [locale, refreshNonce, sessionId, t]);
+  }, [locale, refreshNonce, reviewContext, sessionId, t]);
 
   const currentBundle =
     bundle?.sessionId === sessionId && bundle.locale === locale ? bundle : null;

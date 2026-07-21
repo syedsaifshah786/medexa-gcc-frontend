@@ -1,0 +1,31 @@
+export const rawFinalizeResponse = {
+  session_id: "session-review-1",
+  saved_to_store: true,
+  status: "completed",
+  transcript: "Clinical transcript is present.",
+  elapsed_ms: 12000,
+  language: "en",
+  locale: "en-US",
+  review_bundle: {
+    soap_note: {
+      subjective: {
+        chief_complaint: "Lower back pain",
+        patient_narrative: "Pain has limited walking.",
+        symptoms: ["Lower back pain"],
+        aggravating_factors: ["Sitting"],
+        relieving_factors: [],
+        history: "Present for three weeks",
+      },
+      objective: { observations: [], interventions: [], functional_findings: [], measurements: [] },
+      assessment: { clinical_summary: "Walking is limited.", functional_limitations: ["Walking"] },
+      plan: { next_steps: ["Continue gentle exercises"], home_program: [], follow_up: "Next week" },
+      clinician_review_required: true,
+    },
+    billing_intelligence: { session_items: [], denial_items: [], clinician_review_required: true },
+    patient_summary: { intro: "Session summary", focus_areas: ["Walking"], clinician_review_required: true },
+  },
+  llm_used: true,
+  fallback_reason: null,
+  provider: "groq",
+  model: "test-model",
+};

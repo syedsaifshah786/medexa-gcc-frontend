@@ -25,10 +25,10 @@ function createPatientSummaryDraft(source: GCCPatientSummary | null): PatientSum
   return {
     source,
     isEditing: false,
-    intro: source?.intro ?? "",
-    keyImprovement: source?.key_improvement ?? "",
-    performanceSummary: source?.performance_summary ?? "",
-    closingMessage: source?.closing_message ?? "",
+    intro: source?.intro || source?.summary || "",
+    keyImprovement: source?.keyImprovement ?? "",
+    performanceSummary: source?.performanceSummary ?? "",
+    closingMessage: source?.closingMessage ?? "",
   };
 }
 
@@ -38,15 +38,15 @@ export default function GCCPatientSummaryCard({ patientSummary, isLoading, error
   const activeDraft = draft.source === patientSummary ? draft : createPatientSummaryDraft(patientSummary);
   const { closingMessage, intro, isEditing, keyImprovement, performanceSummary } = activeDraft;
   const hasData = Boolean(patientSummary);
-  const isPrototypeLayout = Boolean(patientSummary?.session_details_prefix && patientSummary.session_details_suffix);
-  const sessionPhrase = patientSummary && patientSummary.session_number !== null && patientSummary.total_sessions !== null
-    ? `Session ${patientSummary.session_number} of ${patientSummary.total_sessions}`
+  const isPrototypeLayout = Boolean(patientSummary?.sessionDetailsPrefix && patientSummary.sessionDetailsSuffix);
+  const sessionPhrase = patientSummary && patientSummary.sessionNumber !== null && patientSummary.totalSessions !== null
+    ? `Session ${patientSummary.sessionNumber} of ${patientSummary.totalSessions}`
     : "";
   const improvementHighlight = keyImprovement.match(/\bwith\s+(.+?)(?=\.$|$)/i)?.[1] ?? "";
 
   return (
     <GCCReviewCardFrame
-      title={patientSummary?.section_title ?? t("review.summary.cardTitle")}
+      title={patientSummary?.sectionTitle ?? t("review.summary.cardTitle")}
       isEditing={isEditing}
       onEditToggle={() => setDraft({ ...activeDraft, isEditing: !isEditing })}
       minHeightClass="min-h-[700px]"
@@ -76,14 +76,14 @@ export default function GCCPatientSummaryCard({ patientSummary, isLoading, error
 
           {isPrototypeLayout ? (
             <p dir="auto" className="text-[15px] leading-[1.55] text-[#344057]">
-              {patientSummary.session_details_prefix}{" "}
+              {patientSummary.sessionDetailsPrefix}{" "}
               {patientSummary.activities.map((activity, index) => (
                 <span key={activity}>
                   <span className="rounded bg-[#edf0ff] px-1 text-[#3948e8]">{activity}</span>
                   {index < patientSummary.activities.length - 1 ? " and " : " "}
                 </span>
               ))}
-              {patientSummary.session_details_suffix}
+              {patientSummary.sessionDetailsSuffix}
             </p>
           ) : (
             <FallbackSessionDetails patientSummary={patientSummary} />
@@ -91,7 +91,7 @@ export default function GCCPatientSummaryCard({ patientSummary, isLoading, error
 
           {(keyImprovement || isEditing) && (
             <section className="rounded-[18px] border border-[#cad8fa] bg-white/85 px-5 py-4">
-              <h3 className="text-[15px] font-semibold text-[#080B3A]">{patientSummary.key_improvement_title ?? t("review.summary.keyImprovement")}</h3>
+              <h3 className="text-[15px] font-semibold text-[#080B3A]">{patientSummary.keyImprovementTitle ?? t("review.summary.keyImprovement")}</h3>
               {isEditing ? (
                 <textarea
                   value={keyImprovement}
@@ -120,11 +120,11 @@ export default function GCCPatientSummaryCard({ patientSummary, isLoading, error
             <p dir="auto" className="text-[15px] leading-[1.55] text-[#344057]">{performanceSummary}</p>
           )}
 
-          {patientSummary.upcoming_care_plan.length > 0 && (
+          {patientSummary.carePlan.length > 0 && (
             <section className="border-t border-dashed border-[#D8DDF2] pt-4">
-              <h3 className="text-[16px] font-semibold text-[#080B3A]">{patientSummary.upcoming_care_plan_title ?? t("review.summary.upcomingCarePlan")}</h3>
+              <h3 className="text-[16px] font-semibold text-[#080B3A]">{patientSummary.upcomingCarePlanTitle ?? t("review.summary.upcomingCarePlan")}</h3>
               <div className="mt-3 grid grid-cols-3 gap-2">
-                {patientSummary.upcoming_care_plan.map((item, index) => (
+                {patientSummary.carePlan.map((item, index) => (
                   <div key={`${item.day ?? "care"}-${item.date ?? index}`} className="rounded-[15px] border border-[#C7D8F8] bg-[#fbfdff] px-3 py-3 text-center">
                     {item.day && <p dir="auto" className="text-[13px] font-medium text-[#080B3A]">{isPrototypeLayout ? item.day : translateCarePlanDay(item.day, t)}</p>}
                     {item.date && <p className="mt-1 text-[23px] font-semibold leading-none text-[#101BD8]">{isPrototypeLayout ? item.date : formatCarePlanDate(item.date, formatDate, formatNumber)}</p>}
@@ -162,10 +162,10 @@ function HighlightedText({ text, highlight, strong = false }: { text: string; hi
 }
 
 function FallbackSessionDetails({ patientSummary }: { patientSummary: GCCPatientSummary }) {
-  if (!patientSummary.activities.length && !patientSummary.focus_areas.length) return null;
+  if (!patientSummary.activities.length && !patientSummary.focusAreas.length) return null;
   return (
     <div className="flex flex-wrap gap-2">
-      {[...patientSummary.activities, ...patientSummary.focus_areas].map((item, index) => (
+      {[...patientSummary.activities, ...patientSummary.focusAreas].map((item, index) => (
         <span key={`${item}-${index}`} dir="auto" className="rounded-md bg-[#ECEBFF] px-2 py-1 text-[14px] font-semibold text-[#101BD8]">{item}</span>
       ))}
     </div>

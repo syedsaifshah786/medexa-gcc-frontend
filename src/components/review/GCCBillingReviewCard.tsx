@@ -26,7 +26,7 @@ function createBillingDraft(source: GCCBillingIntelligence | null): BillingDraft
   return {
     source,
     isEditing: false,
-    items: (source?.session_items ?? []).map((item, index) => ({
+    items: (source?.items ?? []).map((item, index) => ({
       ...item,
       id: item.id ?? `${item.code || "session-item"}-${index}`,
     })),
@@ -40,7 +40,7 @@ export default function GCCBillingReviewCard({ billingIntelligence, isLoading, e
   const { isEditing, items } = activeDraft;
   const hasData = Boolean(billingIntelligence);
 
-  const updateItem = (id: string, field: keyof Pick<EditableBillingItem, "code" | "coding_system" | "status" | "description">, value: string) => {
+  const updateItem = (id: string, field: keyof Pick<EditableBillingItem, "code" | "codingSystem" | "status" | "description">, value: string) => {
     setDraft({
       ...activeDraft,
       items: items.map((item) => (item.id === id ? { ...item, [field]: value } : item)),
@@ -48,7 +48,7 @@ export default function GCCBillingReviewCard({ billingIntelligence, isLoading, e
   };
 
   return (
-    <GCCReviewCardFrame title={billingIntelligence?.section_title ?? t("review.billing.cardTitle")} isEditing={isEditing} onEditToggle={() => setDraft({ ...activeDraft, isEditing: !isEditing })} minHeightClass="min-h-[690px]" editDisabled={!hasData}>
+    <GCCReviewCardFrame title={billingIntelligence?.sectionTitle ?? t("review.billing.cardTitle")} isEditing={isEditing} onEditToggle={() => setDraft({ ...activeDraft, isEditing: !isEditing })} minHeightClass="min-h-[690px]" editDisabled={!hasData}>
       {isLoading ? (
         <ReviewLoadingState />
       ) : errorMessage ? (
@@ -59,7 +59,7 @@ export default function GCCBillingReviewCard({ billingIntelligence, isLoading, e
         <div className="space-y-6">
           <section>
             <div className="flex items-center justify-between gap-4">
-              <h3 className="text-[18px] font-semibold text-[#080B3A]">{billingIntelligence.session_items_title ?? t("review.billing.sessionItems")}</h3>
+              <h3 className="text-[18px] font-semibold text-[#080B3A]">{billingIntelligence.sessionItemsTitle ?? t("review.billing.sessionItems")}</h3>
               <button
                 type="button"
                 onClick={() => {
@@ -67,7 +67,7 @@ export default function GCCBillingReviewCard({ billingIntelligence, isLoading, e
                   setDraft({
                     ...activeDraft,
                     isEditing: true,
-                    items: [...items, { id, code: "", coding_system: "", description: "", status: "", evidence: "", confidence: null }],
+                    items: [...items, { id, code: "", codingSystem: "", description: "", status: "", evidence: "", confidence: null }],
                   });
                 }}
                 className="inline-flex items-center gap-2 text-[14px] font-semibold text-[#071bd8] transition hover:text-[#020e8f]"
@@ -88,12 +88,12 @@ export default function GCCBillingReviewCard({ billingIntelligence, isLoading, e
             </div>
           </section>
 
-          {(billingIntelligence.dx_support_confidence !== null || billingIntelligence.claims_readiness !== null) && (
+          {(billingIntelligence.dxSupportConfidence !== null || billingIntelligence.claimsReadiness !== null) && (
             <section>
-              <h3 className="text-[18px] font-semibold text-[#080B3A]">{billingIntelligence.revenue_title ?? t("review.billing.revenueIntelligence")}</h3>
+              <h3 className="text-[18px] font-semibold text-[#080B3A]">{billingIntelligence.revenueTitle ?? t("review.billing.revenueIntelligence")}</h3>
               <div className="mt-4 space-y-4">
-                {billingIntelligence.dx_support_confidence !== null && <ProgressRow label={t("review.billing.dxSupportConfidence")} value={billingIntelligence.dx_support_confidence} tone="green" />}
-                {billingIntelligence.claims_readiness !== null && <ProgressRow label={t("review.billing.claimsReadiness")} value={billingIntelligence.claims_readiness} tone="blue" />}
+                {billingIntelligence.dxSupportConfidence !== null && <ProgressRow label={t("review.billing.dxSupportConfidence")} value={billingIntelligence.dxSupportConfidence} tone="green" />}
+                {billingIntelligence.claimsReadiness !== null && <ProgressRow label={t("review.billing.claimsReadiness")} value={billingIntelligence.claimsReadiness} tone="blue" />}
               </div>
             </section>
           )}
@@ -104,14 +104,14 @@ export default function GCCBillingReviewCard({ billingIntelligence, isLoading, e
                   <span className="grid size-7 place-items-center rounded-full bg-white text-[#ef5757]">
                     <AlertIcon className="size-5" />
                   </span>
-                  <h3 className="text-[15px] font-semibold text-[#080B3A]">{billingIntelligence.denial_loop_title ?? t("review.billing.activeDenialLoop")}</h3>
+                  <h3 className="text-[15px] font-semibold text-[#080B3A]">{billingIntelligence.denialLoopTitle ?? t("review.billing.activeDenialLoop")}</h3>
                 </div>
                 <p className="rounded bg-white px-2 py-1 text-[12px] font-bold text-[#922525]">
-                  {formatNumber(billingIntelligence.denial_items.length)} Items
+                  {formatNumber(billingIntelligence.denialItems.length)} Items
                 </p>
               </div>
-              {billingIntelligence.denial_items.length > 0 && <div className="mt-3 space-y-2 text-[14px] font-medium text-[#212332]">
-                {billingIntelligence.denial_items.map((item, index) => (
+              {billingIntelligence.denialItems.length > 0 && <div className="mt-3 space-y-2 text-[14px] font-medium text-[#212332]">
+                {billingIntelligence.denialItems.map((item, index) => (
                   <p key={`denial-${index}`} dir="auto">{item}</p>
                 ))}
               </div>}
@@ -122,7 +122,7 @@ export default function GCCBillingReviewCard({ billingIntelligence, isLoading, e
   );
 }
 
-function CodingItem({ item, isEditing, onUpdate, onDelete }: { item: EditableBillingItem; isEditing: boolean; onUpdate: (id: string, field: keyof Pick<EditableBillingItem, "code" | "coding_system" | "status" | "description">, value: string) => void; onDelete: () => void }) {
+function CodingItem({ item, isEditing, onUpdate, onDelete }: { item: EditableBillingItem; isEditing: boolean; onUpdate: (id: string, field: keyof Pick<EditableBillingItem, "code" | "codingSystem" | "status" | "description">, value: string) => void; onDelete: () => void }) {
   const { t } = useGCCLocale();
 
   return (
@@ -136,11 +136,11 @@ function CodingItem({ item, isEditing, onUpdate, onDelete }: { item: EditableBil
               ) : (
                 <bdi dir="ltr" className="rounded-md bg-[#11182e] px-3 py-1 text-[13px] font-medium text-white">{item.code}</bdi>
               ))}
-            {item.coding_system &&
+            {item.codingSystem &&
               (isEditing ? (
-                <input value={item.coding_system} onChange={(event) => onUpdate(item.id, "coding_system", event.target.value)} aria-label={t("review.billing.codingSystemInputAria")} dir="ltr" className="h-8 w-28 rounded-full border border-[#D8DDF2] bg-white px-3 text-left text-[12px] font-semibold text-[#080B3A] outline-none" />
+                <input value={item.codingSystem} onChange={(event) => onUpdate(item.id, "codingSystem", event.target.value)} aria-label={t("review.billing.codingSystemInputAria")} dir="ltr" className="h-8 w-28 rounded-full border border-[#D8DDF2] bg-white px-3 text-left text-[12px] font-semibold text-[#080B3A] outline-none" />
               ) : (
-                <bdi dir="ltr" className="rounded-md border border-[#9da7ff] bg-white px-2 py-0.5 text-[12px] font-medium text-[#5c606d]">{item.coding_system}</bdi>
+                <bdi dir="ltr" className="rounded-md border border-[#9da7ff] bg-white px-2 py-0.5 text-[12px] font-medium text-[#5c606d]">{item.codingSystem}</bdi>
               ))}
           </div>
           {isEditing ? (
@@ -162,7 +162,7 @@ function CodingItem({ item, isEditing, onUpdate, onDelete }: { item: EditableBil
   );
 }
 
-function StatusBadge({ item, isEditing, onUpdate }: { item: EditableBillingItem; isEditing: boolean; onUpdate: (id: string, field: keyof Pick<EditableBillingItem, "code" | "coding_system" | "status" | "description">, value: string) => void }) {
+function StatusBadge({ item, isEditing, onUpdate }: { item: EditableBillingItem; isEditing: boolean; onUpdate: (id: string, field: keyof Pick<EditableBillingItem, "code" | "codingSystem" | "status" | "description">, value: string) => void }) {
   const { t } = useGCCLocale();
 
   return (

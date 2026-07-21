@@ -11,7 +11,8 @@ import {
   normalizeVoiceCommandText,
   removeVoiceCommands,
 } from "@/lib/gcc/transcript-utils";
-import { buildReviewBundleFromFinalizeResponse, finalizeGCCSession, GCCFinalizeError, saveReviewBundleLocally, saveSoapLocally } from "@/lib/gcc/session-api";
+import { buildReviewBundleFromFinalizeResponse, cacheReviewBundleBeforeNavigation, finalizeGCCSession, GCCFinalizeError, saveSoapLocally } from "@/lib/gcc/session-api";
+import { useGCCReviewContext } from "@/providers/GCCReviewProvider";
 import type { SBSMatch } from "@/types/sbs-v3";
 
 export type SessionStatus = "idle" | "command-listening" | "starting" | "recording" | "paused" | "stopping" | "stopped" | "error";
@@ -125,6 +126,7 @@ const getBestAlternative = (result: SpeechRecognitionResult) => {
 };
 
 export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
+  const { setReviewBundle } = useGCCReviewContext();
   const router = useRouter();
   const pathname = usePathname();
   const { locale, t, formatDuration } = useGCCLocale();
@@ -574,12 +576,12 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
         sbsMatches: sbsMatchesRef.current,
       });
 
-      if (response.saved_to_store !== true || !response.review_bundle?.soap_note || !response.review_bundle.billing_intelligence || !response.review_bundle.patient_summary) {
+      if (response.savedToStore !== true || response.sessionId !== id) {
         throw new Error("FINALIZE_INCOMPLETE");
       }
 
-      const reviewBundle = buildReviewBundleFromFinalizeResponse(response, locale);
-      if (!saveReviewBundleLocally(reviewBundle, locale)) {
+      const reviewBundle = buildReviewBundleFromFinalizeResponse(response);
+      if (!cacheReviewBundleBeforeNavigation(reviewBundle, locale, (bundle) => setReviewBundle(bundle, "finalize"))) {
         throw new Error("FINALIZE_CACHE_FAILED");
       }
       saveSoapLocally({
@@ -587,8 +589,8 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
         soapNote: reviewBundle.soapNote,
         elapsedMs: frozenElapsed,
         transcript,
-        llmUsed: response.llm_used,
-        fallbackReason: response.fallback_reason,
+        llmUsed: response.llmUsed,
+        fallbackReason: response.fallbackReason,
         locale,
       });
       setSafeStatus("stopped");
@@ -632,6 +634,7 @@ export function GCCVoiceSessionProvider({ children }: { children: ReactNode }) {
     persistSession,
     router,
     saveRecoveryDraft,
+    setReviewBundle,
     setSafeStatus,
     stopTimerInterval,
   ]);

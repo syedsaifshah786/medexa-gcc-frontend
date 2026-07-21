@@ -2,126 +2,24 @@ import type { TranscriptSegment } from "@/providers/GCCVoiceSessionProvider";
 import { buildFinalTranscript, normalizeTranscript } from "@/lib/gcc/transcript-utils";
 import type { GCCLocale } from "@/i18n/types";
 import type { SBSMatch } from "@/types/sbs-v3";
+import { countMeaningfulSoapFields, mapReviewBundle, mapReviewBundleResponse } from "@/lib/review/map-review-bundle-response";
+import { getCompatibleReviewCacheKeys, getReviewCacheKey } from "@/lib/review/review-cache-key";
+import type {
+  GCCBillingIntelligence,
+  GCCMappedFinalizeResponse,
+  GCCPatientSummary,
+  GCCReviewBundle,
+  GCCSoapNote,
+} from "@/types/gcc-review";
 
-export type GCCSoapNote = {
-  section_title?: string;
-  narrative_title?: string;
-  symptoms_title?: string;
-  history_title?: string;
-  subjective: {
-    chief_complaint: string;
-    patient_narrative: string;
-    symptoms: string[];
-    history: string;
-    reported_duration?: string;
-    pain_score?: string;
-    source_evidence?: string[];
-  };
-  objective: {
-    observations: string[];
-    interventions: string[];
-    functional_findings?: string[];
-    measurements: string[];
-    source_evidence?: string[];
-  };
-  assessment: {
-    clinical_summary: string;
-    response_to_treatment: string;
-    functional_limitations: string[];
-    progress?: string;
-    risks_or_flags?: string[];
-    source_evidence?: string[];
-  };
-  plan: {
-    next_steps: string[];
-    home_program: string[];
-    follow_up: string;
-    frequency?: string;
-    clinician_actions_required?: string[];
-    source_evidence?: string[];
-  };
-  clinician_review_required: boolean;
-};
-
-export type GCCBillingSessionItem = {
-  id?: string;
-  code: string;
-  coding_system: string;
-  description: string;
-  status: string;
-  evidence: string;
-  confidence: number | null;
-};
-
-export type GCCBillingIntelligence = {
-  section_title?: string;
-  session_items_title?: string;
-  revenue_title?: string;
-  denial_loop_title?: string;
-  session_items: GCCBillingSessionItem[];
-  dx_support_confidence: number | null;
-  claims_readiness: number | null;
-  denial_items: string[];
-  clinician_review_required: boolean;
-};
-
-export type GCCCarePlanItem = {
-  date?: string;
-  day?: string;
-  label?: string;
-};
-
-export type GCCPatientSummary = {
-  section_title?: string;
-  key_improvement_title?: string;
-  upcoming_care_plan_title?: string;
-  intro: string;
-  session_number: number | null;
-  total_sessions: number | null;
-  activities: string[];
-  focus_areas: string[];
-  key_improvement: string;
-  performance_summary: string;
-  upcoming_care_plan: GCCCarePlanItem[];
-  closing_message: string;
-  clinician_review_required: boolean;
-  session_details_prefix?: string;
-  session_details_suffix?: string;
-};
-
-export type GCCReviewBundle = {
-  sessionId: string;
-  locale: GCCLocale;
-  status: "completed";
-  source?: "live";
-  transcript: string;
-  elapsedMs: number;
-  soapNote: GCCSoapNote;
-  billingIntelligence: GCCBillingIntelligence;
-  patientSummary: GCCPatientSummary;
-  generatedAt: string;
-  llmUsed?: boolean;
-  fallbackReason?: string | null;
-};
-
-export type GCCFinalizeSessionResponse = {
-  session_id: string;
-  saved_to_store: boolean;
-  status: "completed" | string;
-  transcript: string;
-  elapsed_ms: number;
-  review_bundle: {
-    soap_note: GCCSoapNote;
-    billing_intelligence: GCCBillingIntelligence;
-    patient_summary: GCCPatientSummary;
-  };
-  llm_used: boolean;
-  fallback_reason: string | null;
-  provider: "groq";
-  model: string;
-  language?: GCCLocale;
-  locale?: string;
-};
+export type {
+  GCCBillingIntelligence,
+  GCCBillingSessionItem,
+  GCCCarePlanItem,
+  GCCPatientSummary,
+  GCCReviewBundle,
+  GCCSoapNote,
+} from "@/types/gcc-review";
 
 export type GCCFinalizeErrorKind =
   | "rate_limit"
@@ -168,59 +66,67 @@ type FinalizePayload = {
 
 const emptySoapNote: GCCSoapNote = {
   subjective: {
-    chief_complaint: "",
-    patient_narrative: "",
+    chiefComplaint: null,
+    patientNarrative: null,
     symptoms: [],
-    history: "",
-    reported_duration: "",
-    pain_score: "",
-    source_evidence: [],
+    aggravatingFactors: [],
+    relievingFactors: [],
+    history: null,
+    reportedDuration: null,
+    painScore: null,
+    sourceEvidence: [],
   },
   objective: {
     observations: [],
     interventions: [],
-    functional_findings: [],
+    functionalFindings: [],
     measurements: [],
-    source_evidence: [],
+    sourceEvidence: [],
   },
   assessment: {
-    clinical_summary: "",
-    response_to_treatment: "",
-    functional_limitations: [],
-    progress: "",
-    risks_or_flags: [],
-    source_evidence: [],
+    summary: null,
+    diagnoses: [],
+    responseToTreatment: null,
+    functionalLimitations: [],
+    progress: null,
+    risksOrFlags: [],
+    sourceEvidence: [],
+    clinicianReviewRequired: true,
   },
   plan: {
-    next_steps: [],
-    home_program: [],
-    follow_up: "",
-    frequency: "",
-    clinician_actions_required: [],
-    source_evidence: [],
+    interventions: [],
+    recommendations: [],
+    homeProgram: [],
+    followUp: null,
+    frequency: null,
+    clinicianActionsRequired: [],
+    sourceEvidence: [],
+    clinicianReviewRequired: true,
   },
-  clinician_review_required: true,
+  clinicianReviewRequired: true,
 };
 
 const emptyBillingIntelligence: GCCBillingIntelligence = {
-  session_items: [],
-  dx_support_confidence: null,
-  claims_readiness: null,
-  denial_items: [],
-  clinician_review_required: true,
+  items: [],
+  dxSupportConfidence: null,
+  claimsReadiness: null,
+  denialItems: [],
+  clinicianReviewRequired: true,
 };
 
 const emptyPatientSummary: GCCPatientSummary = {
   intro: "",
-  session_number: null,
-  total_sessions: null,
+  summary: "",
+  sessionNumber: null,
+  totalSessions: null,
   activities: [],
-  focus_areas: [],
-  key_improvement: "",
-  performance_summary: "",
-  upcoming_care_plan: [],
-  closing_message: "",
-  clinician_review_required: true,
+  focusAreas: [],
+  keyPoints: [],
+  keyImprovement: "",
+  performanceSummary: "",
+  carePlan: [],
+  closingMessage: "",
+  clinicianReviewRequired: true,
 };
 
 export function getApiBaseUrl() {
@@ -228,7 +134,7 @@ export function getApiBaseUrl() {
 }
 
 export function getReviewBundleStorageKey(sessionId: string, locale: GCCLocale) {
-  return `medexa_gcc_review_bundle_${sessionId}_${locale}`;
+  return getReviewCacheKey(sessionId, locale);
 }
 
 export function getSoapStorageKey(sessionId: string, locale: GCCLocale) {
@@ -289,29 +195,29 @@ export function createTranscriptDerivedReviewBundle({
     soapNote: {
       subjective: {
         ...emptySoapNote.subjective,
-        chief_complaint: symptomSentences[0] ?? "",
-        patient_narrative: narrative,
+        chiefComplaint: symptomSentences[0] ?? null,
+        patientNarrative: narrative,
         symptoms: symptomSentences.slice(0, 6),
-        source_evidence: evidence,
+        sourceEvidence: evidence,
       },
       objective: {
         ...emptySoapNote.objective,
         interventions: activitySentences.slice(0, 6),
         measurements: measurementSentences.slice(0, 6),
-        source_evidence: evidence,
+        sourceEvidence: evidence,
       },
       assessment: {
         ...emptySoapNote.assessment,
-        clinical_summary: narrative,
-        functional_limitations: symptomSentences.slice(0, 4),
-        source_evidence: evidence,
+        summary: narrative,
+        functionalLimitations: symptomSentences.slice(0, 4),
+        sourceEvidence: evidence,
       },
       plan: {
         ...emptySoapNote.plan,
-        next_steps: planSentences.slice(0, 5),
-        source_evidence: evidence,
+        recommendations: planSentences.slice(0, 5),
+        sourceEvidence: evidence,
       },
-      clinician_review_required: true,
+      clinicianReviewRequired: true,
     },
     billingIntelligence: {
       ...emptyBillingIntelligence,
@@ -320,98 +226,13 @@ export function createTranscriptDerivedReviewBundle({
       ...emptyPatientSummary,
       intro: narrative,
       activities: activitySentences.slice(0, 5),
-      focus_areas: symptomSentences.slice(0, 5),
-      performance_summary: activitySentences.length || symptomSentences.length ? sentences.slice(0, 3).join(" ") : "",
+      focusAreas: symptomSentences.slice(0, 5),
+      performanceSummary: activitySentences.length || symptomSentences.length ? sentences.slice(0, 3).join(" ") : "",
     },
     generatedAt: new Date().toISOString(),
     llmUsed: false,
     fallbackReason,
-  };
-}
-
-function normalizeResponseBundle(
-  response: GCCFinalizeSessionResponse,
-  locale: GCCLocale,
-): GCCReviewBundle {
-  return {
-    sessionId: response.session_id,
-    locale,
-    status: "completed",
     source: "live",
-    transcript: response.transcript ?? "",
-    elapsedMs: response.elapsed_ms ?? 0,
-    soapNote: response.review_bundle.soap_note,
-    billingIntelligence: response.review_bundle.billing_intelligence,
-    patientSummary: response.review_bundle.patient_summary,
-    generatedAt: new Date().toISOString(),
-    llmUsed: response.llm_used,
-    fallbackReason: response.fallback_reason,
-  };
-}
-
-function validateFinalizeResponse(
-  value: unknown,
-  expectedLanguage: GCCLocale,
-): GCCFinalizeSessionResponse {
-  if (!value || typeof value !== "object") {
-    throw new GCCFinalizeError({
-      kind: "invalid_review_bundle",
-      errorCode: "invalid_review_bundle",
-      message: "The backend returned an invalid review bundle.",
-      retryable: false,
-    });
-  }
-
-  const response = value as Partial<GCCFinalizeSessionResponse> & {
-    ok?: boolean;
-    soap_note?: GCCSoapNote;
-    billing_intelligence?: GCCBillingIntelligence;
-    patient_summary?: GCCPatientSummary;
-    llm_fallback_reason?: string | null;
-  };
-
-  const reviewBundle = response.review_bundle ?? {
-    soap_note: response.soap_note,
-    billing_intelligence: response.billing_intelligence,
-    patient_summary: response.patient_summary,
-  };
-  const expectedLocale = expectedLanguage === "ar" ? "ar-SA" : "en-US";
-
-  if (
-    response.ok === false ||
-    response.saved_to_store !== true ||
-    response.status !== "completed" ||
-    (response.language !== undefined && response.language !== expectedLanguage) ||
-    (response.locale !== undefined && response.locale !== expectedLocale) ||
-    !reviewBundle?.soap_note ||
-    !reviewBundle.billing_intelligence ||
-    !reviewBundle.patient_summary
-  ) {
-    throw new GCCFinalizeError({
-      kind: "invalid_review_bundle",
-      errorCode: "invalid_review_bundle",
-      message: "The backend returned an invalid review bundle.",
-      retryable: false,
-    });
-  }
-
-  return {
-    session_id: response.session_id ?? "",
-    saved_to_store: true,
-    status: response.status ?? "completed",
-    transcript: response.transcript ?? "",
-    elapsed_ms: response.elapsed_ms ?? 0,
-    review_bundle: {
-      soap_note: reviewBundle.soap_note,
-      billing_intelligence: reviewBundle.billing_intelligence,
-      patient_summary: reviewBundle.patient_summary,
-    },
-    llm_used: response.llm_used ?? true,
-    fallback_reason: response.fallback_reason ?? response.llm_fallback_reason ?? null,
-    provider: response.provider ?? "groq",
-    model: response.model ?? "configured",
-    language: response.language,
-    locale: response.locale,
   };
 }
 
@@ -455,10 +276,27 @@ export function saveReviewBundleLocally(bundle: GCCReviewBundle, locale = bundle
       getReviewBundleStorageKey(bundle.sessionId, locale),
       JSON.stringify({ ...bundle, locale, source: "live" }),
     );
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[GCC review] cache write", {
+        cacheKey: getReviewBundleStorageKey(bundle.sessionId, locale),
+        cacheWriteSucceeded: true,
+        mappedSoapFieldCount: countMeaningfulSoapFields(bundle.soapNote),
+      });
+    }
     return true;
   } catch {
     return false;
   }
+}
+
+export function cacheReviewBundleBeforeNavigation(
+  bundle: GCCReviewBundle,
+  locale: GCCLocale,
+  setProviderBundle: (bundle: GCCReviewBundle) => void,
+) {
+  if (!saveReviewBundleLocally(bundle, locale)) return false;
+  setProviderBundle(bundle);
+  return true;
 }
 
 export function saveSoapLocally({
@@ -497,7 +335,7 @@ export function saveSoapLocally({
   }
 }
 
-export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCFinalizeSessionResponse> {
+export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCMappedFinalizeResponse> {
   const apiBaseUrl = getApiBaseUrl();
   const locale = payload.locale ?? "en";
   const transcript = buildFinalTranscript({
@@ -563,12 +401,31 @@ export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCF
     }
 
     const responseValue = await response.json().catch(() => null);
+    if (process.env.NODE_ENV === "development") {
+      const raw = responseValue && typeof responseValue === "object" ? responseValue as Record<string, unknown> : {};
+      const rawBundle = raw.review_bundle && typeof raw.review_bundle === "object" ? raw.review_bundle as Record<string, unknown> : null;
+      console.debug("[GCC review] finalize response", {
+        finalizeHttpStatus: response.status,
+        hasRawReviewBundle: Boolean(rawBundle),
+        hasRawSoapNote: Boolean(rawBundle?.soap_note),
+      });
+    }
     if (!response.ok) {
       throw finalizeErrorFromResponse(response.status, responseValue);
     }
 
-    const validated = validateFinalizeResponse(responseValue, locale);
-    if (validated.session_id !== payload.sessionId || !normalizeTranscript(validated.transcript)) {
+    let mapped: GCCMappedFinalizeResponse;
+    try {
+      mapped = mapReviewBundleResponse(responseValue, locale);
+    } catch {
+      throw new GCCFinalizeError({
+        kind: "invalid_review_bundle",
+        errorCode: "invalid_review_bundle",
+        message: "The generated SOAP Notes were incomplete.",
+        retryable: false,
+      });
+    }
+    if (mapped.sessionId !== payload.sessionId || !normalizeTranscript(mapped.transcript)) {
       throw new GCCFinalizeError({
         kind: "invalid_review_bundle",
         errorCode: "mismatched_review_bundle",
@@ -576,31 +433,22 @@ export async function finalizeGCCSession(payload: FinalizePayload): Promise<GCCF
         retryable: false,
       });
     }
-    if (!validated.review_bundle.billing_intelligence || !validated.review_bundle.patient_summary) {
-      throw new GCCFinalizeError({
-        kind: "invalid_review_bundle",
-        errorCode: "incomplete_review_bundle",
-        message: "The backend returned an incomplete review bundle.",
-        retryable: false,
+    if (process.env.NODE_ENV === "development") {
+      console.debug("[GCC review] finalize mapped", {
+        currentSessionIdMatchesResponse: mapped.sessionId === payload.sessionId,
+        mappedSoapFieldCount: countMeaningfulSoapFields(mapped.reviewBundle.soapNote),
       });
     }
-
-    return {
-      ...validated,
-      session_id: validated.session_id || payload.sessionId,
-      transcript: validated.transcript || transcript,
-      elapsed_ms: validated.elapsed_ms || payload.elapsedMs,
-    };
+    return mapped;
   } finally {
     window.clearTimeout(timeoutId);
   }
 }
 
 export function buildReviewBundleFromFinalizeResponse(
-  response: GCCFinalizeSessionResponse,
-  locale: GCCLocale = response.language ?? "en",
+  response: GCCMappedFinalizeResponse,
 ): GCCReviewBundle {
-  return normalizeResponseBundle(response, locale);
+  return response.reviewBundle;
 }
 
 function normalizeStoredBundle(
@@ -610,26 +458,37 @@ function normalizeStoredBundle(
 ): GCCReviewBundle | null {
   if (!value || typeof value !== "object") return null;
   const parsed = value as Partial<GCCReviewBundle>;
-  if (parsed.sessionId !== sessionId || parsed.status !== "completed" || !parsed.soapNote || !parsed.billingIntelligence || !parsed.patientSummary) {
-    return null;
-  }
+  if (parsed.sessionId !== sessionId || parsed.status !== "completed") return null;
   if ("source" in parsed && parsed.source !== "live") return null;
   if (parsed.locale !== undefined && parsed.locale !== locale) return null;
-  if (locale === "ar" && parsed.locale !== "ar") return null;
-  return { ...parsed, locale, source: "live" } as GCCReviewBundle;
+  try {
+    return mapReviewBundle(parsed, {
+      sessionId,
+      locale,
+      transcript: typeof parsed.transcript === "string" ? parsed.transcript : "",
+      elapsedMs: typeof parsed.elapsedMs === "number" ? parsed.elapsedMs : 0,
+      generatedAt: typeof parsed.generatedAt === "string" ? parsed.generatedAt : undefined,
+      llmUsed: parsed.llmUsed,
+      fallbackReason: parsed.fallbackReason,
+    });
+  } catch {
+    return null;
+  }
 }
 
 export function readReviewBundleFromCache(sessionId: string, locale: GCCLocale = "en") {
   if (typeof window === "undefined") return null;
 
   try {
-    const cached = localStorage.getItem(getReviewBundleStorageKey(sessionId, locale));
-    const legacyCached = locale === "en"
-      ? localStorage.getItem(`medexa_gcc_review_bundle_${sessionId}`)
-      : null;
-    const serialized = cached ?? legacyCached;
-    if (!serialized) return null;
-    return normalizeStoredBundle(JSON.parse(serialized), sessionId, locale);
+    for (const key of getCompatibleReviewCacheKeys(sessionId, locale)) {
+      const serialized = localStorage.getItem(key);
+      if (!serialized) continue;
+      const bundle = normalizeStoredBundle(JSON.parse(serialized), sessionId, locale);
+      if (!bundle) continue;
+      if (key !== getReviewBundleStorageKey(sessionId, locale)) saveReviewBundleLocally(bundle, locale);
+      return bundle;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -658,25 +517,18 @@ export async function fetchGCCReviewBundle(
     }
     const transcript = value?.transcript ?? rawBundle?.transcript ?? "";
     const elapsedMs = value?.elapsed_ms ?? rawBundle?.elapsedMs ?? 0;
-    const soapNote = rawBundle?.soap_note ?? rawBundle?.soapNote;
-    const billingIntelligence = rawBundle?.billing_intelligence ?? rawBundle?.billingIntelligence;
-    const patientSummary = rawBundle?.patient_summary ?? rawBundle?.patientSummary;
-
-    if (soapNote && billingIntelligence && patientSummary) {
-      return {
+    try {
+      return mapReviewBundle(rawBundle, {
         sessionId,
         locale,
-        status: "completed",
-        source: "live",
         transcript,
         elapsedMs,
-        soapNote,
-        billingIntelligence,
-        patientSummary,
-        generatedAt: rawBundle?.generatedAt ?? value?.generated_at ?? new Date().toISOString(),
+        generatedAt: rawBundle?.generatedAt ?? value?.generated_at,
         llmUsed: value?.llm_used ?? rawBundle?.llmUsed,
-        fallbackReason: value?.fallback_reason ?? rawBundle?.fallbackReason ?? null,
-      };
+        fallbackReason: value?.fallback_reason ?? rawBundle?.fallbackReason,
+      });
+    } catch {
+      return null;
     }
   }
 
@@ -687,19 +539,14 @@ export async function fetchGCCReviewBundle(
   ]);
 
   if (!soapNote || !billingIntelligence || !patientSummary) return null;
-
-  return {
-    sessionId,
-    locale,
-    status: "completed",
-    source: "live",
-    transcript: "",
-    elapsedMs: 0,
-    soapNote,
-    billingIntelligence,
-    patientSummary,
-    generatedAt: new Date().toISOString(),
-  };
+  try {
+    return mapReviewBundle({ soap_note: soapNote, billing_intelligence: billingIntelligence, patient_summary: patientSummary }, {
+      sessionId,
+      locale,
+    });
+  } catch {
+    return null;
+  }
 }
 
 function getLocaleQuery(locale: GCCLocale) {
@@ -709,7 +556,7 @@ function getLocaleQuery(locale: GCCLocale) {
   }).toString();
 }
 
-export async function fetchGCCSoapNote(sessionId: string, locale: GCCLocale = "en") {
+export async function fetchGCCSoapNote(sessionId: string, locale: GCCLocale = "en"): Promise<unknown | null> {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl) return null;
 
@@ -719,10 +566,10 @@ export async function fetchGCCSoapNote(sessionId: string, locale: GCCLocale = "e
   );
   if (!response.ok) return null;
   const value = await response.json();
-  return (value?.soap_note ?? value) as GCCSoapNote;
+  return value?.soap_note ?? value;
 }
 
-export async function fetchGCCBillingIntelligence(sessionId: string, locale: GCCLocale = "en") {
+export async function fetchGCCBillingIntelligence(sessionId: string, locale: GCCLocale = "en"): Promise<unknown | null> {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl) return null;
 
@@ -732,10 +579,10 @@ export async function fetchGCCBillingIntelligence(sessionId: string, locale: GCC
   );
   if (!response.ok) return null;
   const value = await response.json();
-  return (value?.billing_intelligence ?? value) as GCCBillingIntelligence;
+  return value?.billing_intelligence ?? value;
 }
 
-export async function fetchGCCPatientSummary(sessionId: string, locale: GCCLocale = "en") {
+export async function fetchGCCPatientSummary(sessionId: string, locale: GCCLocale = "en"): Promise<unknown | null> {
   const apiBaseUrl = getApiBaseUrl();
   if (!apiBaseUrl) return null;
 
@@ -745,5 +592,5 @@ export async function fetchGCCPatientSummary(sessionId: string, locale: GCCLocal
   );
   if (!response.ok) return null;
   const value = await response.json();
-  return (value?.patient_summary ?? value) as GCCPatientSummary;
+  return value?.patient_summary ?? value;
 }
